@@ -51,3 +51,4 @@ class Yui:
             return jsonify({"error": "Paramètre 'q' manquant"}), 400
         
         return jsonify(Cardinal.getInfoAnime(querry))
+    
