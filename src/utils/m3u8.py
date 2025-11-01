@@ -3,7 +3,11 @@ import os
 import subprocess
 from datetime import datetime
 from playwright.async_api import async_playwright
-from src.utils.Mita import Mita
+
+try :
+    from src.utils.Mita import Mita
+except ImportError:
+    from .Mita import Mita
 
 # --- Fonctions utilitaires ---
 PATH = os.path.dirname(os.path.abspath(__file__))

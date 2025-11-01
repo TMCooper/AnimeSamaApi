@@ -1,7 +1,11 @@
 import requests, json, os, re, asyncio
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
-from src.utils.m3u8 import extract_m3u8_from_page
+
+try :
+    from .utils.m3u8 import extract_m3u8_from_page
+except ImportError:
+    from src.utils.m3u8 import extract_m3u8_from_page
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, r"data\json")

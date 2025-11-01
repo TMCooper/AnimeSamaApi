@@ -1,5 +1,9 @@
 from flask import Flask, jsonify, request
-from src.backend import *
+
+try:
+    from .backend import *
+except ImportError:
+    from src.backend import *
 
 class Yui:
 
