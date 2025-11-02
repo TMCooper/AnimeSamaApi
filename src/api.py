@@ -55,6 +55,16 @@ class Yui:
                 
         return jsonify(Cardinal.getInfoAnime(querry))
     
+    @app.route('/api/getSpecificAnime', methods=["GET"])
+    def getSpecificAnime():
+        querry = request.args.get("q", "").strip()
+        saison = request.args.get("s", "").strip() # saison1 par défaut
+        version = request.args.get("v", "").strip() # version sera en vostfr par défaut
+    
+        if not querry:
+            return jsonify({"error": "Paramètre 'q' manquant"}), 400
+
+        return jsonify(Cardinal.getSpecificAnime(querry, saison, version))    
     
     @app.route('/api/getAnimeLink', methods=["GET"])
     def getAnimeLink():
@@ -64,9 +74,5 @@ class Yui:
 
         if not nom:
             return jsonify({"error": "Paramètre 'n' manquant"}), 400
-        if not saison:
-            saison = "saison1"
-        if not version:
-            version = "vostfr"
         
         return jsonify(Cardinal.getAnimeLink(nom, saison, version))

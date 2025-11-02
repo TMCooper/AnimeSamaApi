@@ -207,26 +207,66 @@ class Cardinal:
                 #     })
         return animes#, scan_url
     
-    def getAnimeLink(nom, saison, version): # Recupère les different lien disponible affin de retourner une playlist complete et prete a être télécharger
+    def getSpecificAnime(nom, saison=None, version=None):
+        scraper = cloudscraper.create_scraper()
+        reponse = scraper.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+
+        # Vérifier que saison n'est pas vide
+        if not saison:
+            saison = "saison1"
+        if not version:
+            version = "vostfr"
+
+        # Extraire toutes les saisons
+        saisons = [item["Saison"] for item in reponse if "Saison" in item]
+        
+        # Normaliser les noms
+        saisons_normalized = [s.strip().lower().replace(" ", "") for s in saisons]
+        saison_norm = saison.strip().lower().replace(" ", "")
+        
+        # print(f"Recherche de : {repr(saison_norm)}")  # Debug
+
+        for i, s in enumerate(saisons_normalized):
+            # print(f"{i} {repr(s)} == {repr(saison_norm)}")
+            if s == saison_norm:
+                # print("Trouvé :", reponse[i])
+                return reponse[i]
+
+        # print(f"Aucune correspondance trouvée pour '{saison}'")
+        # print(f"Saisons disponibles : {saisons}")
+        return None
+        
+    def getAnimeLink(nom, saison=None, version=None): # Recupère les different lien disponible affin de retourner une playlist complete et prete a être télécharger
+        
+        if not saison:
+            saison = "saison1"
+        if not version:
+            version = "vostfr"
+
         error = []
         good_link = []
         allowed_sites = ["video.sibnet.ru"]
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
         
-        # reponse = requests.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+        # reponse = requests.get(f"http://127.0.0.1:5000/api/getSpecificAnime?q={nom}&s={saison}").json()
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        reponse = scraper.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+        reponse = scraper.get(f"http://127.0.0.1:5000/api/getSpecificAnime?q={nom}&s={saison}").json()
 
-        base_url = reponse[0]["base_url"]
-        saison_num = saison.lower()
-        version = version.lower()
+        base_url = reponse["base_url"]
+
+        saison_num = saison.lower().replace(" ", "")
+        version = version.lower().replace(" ", "")
 
         if saison_num == "film":
-            link = f"{base_url}{saison_num}/{version}"
-        
+            url = reponse["url"]
+            first_rewoks = url.lower().replace("//film", "/film")
+            second_rewoks = first_rewoks.split("/vostfr")[0]
+            link = f"{second_rewoks}/{version}"
         else:
-            link = f"{base_url}/{saison_num}/{version}"   
+            url = reponse["url"]
+            new_url = url.split("/vostfr")[0]
+            link = f"{new_url}/{version}"
 
         # print(link)
         
