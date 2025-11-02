@@ -10,8 +10,8 @@ except ImportError:
     from .Mita import Mita
 
 # --- Fonctions utilitaires ---
-PATH = os.path.dirname(os.path.abspath(__file__))
-PATH_DOWNLOAD = os.path.join(PATH, "..", "Dist")
+PATH_EXEC = os.getcwd()
+PATH_DOWNLOAD = os.path.join(PATH_EXEC, "Dist")
 os.makedirs(PATH_DOWNLOAD, exist_ok=True)
 
 def log_error(anime_title, season_number, episode_number, error):
