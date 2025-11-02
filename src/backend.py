@@ -1,4 +1,4 @@
-import requests, json, os, re, asyncio, cloudscraper
+import json, os, re, asyncio, cloudscraper
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
@@ -111,7 +111,7 @@ class Cardinal:
             # animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
             scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
             animes_data = scraper.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
-        except requests.exceptions.RequestException as e:
+        except cloudscraper.exceptions.RequestException as e:
             print(f"Erreur lors de la récupération des animes: {e}")
             return []
 
@@ -278,7 +278,7 @@ class Cardinal:
                     if len(good_link) == nombre_episodes:
                         return good_link
 
-            except requests.ConnectionError:
+            except cloudscraper.ConnectionError:
                 # print("Erreur le serveur a fermer la connection...")
                 error.append({
                     "lecteur" : lecteur,
@@ -324,7 +324,7 @@ class Cardinal:
                             if len(good_link) == nombre_episodes:
                                 return good_link
 
-                    except requests.ConnectionError:
+                    except cloudscraper.ConnectionError:
                         # print("Erreur : le serveur a fermé la connexion...")
                         new_error.append({
                             "lecteur": lecteur_er,
