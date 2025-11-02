@@ -1,4 +1,4 @@
-import json, os, re, asyncio, cloudscraper
+import json, os, re, asyncio, cloudscraper, requests
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
@@ -318,7 +318,7 @@ class Cardinal:
                     if len(good_link) == nombre_episodes:
                         return good_link
 
-            except cloudscraper.ConnectionError:
+            except requests.ConnectionError:
                 # print("Erreur le serveur a fermer la connection...")
                 error.append({
                     "lecteur" : lecteur,
@@ -364,7 +364,7 @@ class Cardinal:
                             if len(good_link) == nombre_episodes:
                                 return good_link
 
-                    except cloudscraper.ConnectionError:
+                    except requests.ConnectionError:
                         # print("Erreur : le serveur a fermé la connexion...")
                         new_error.append({
                             "lecteur": lecteur_er,
