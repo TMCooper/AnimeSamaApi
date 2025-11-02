@@ -1,4 +1,4 @@
-import requests, json, os, re, asyncio
+import requests, json, os, re, asyncio, cloudscraper
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
@@ -41,7 +41,11 @@ class Cardinal:
 
         while True:
             if not os.path.exists(PATH_ANIME) or reset == "True":
-                reponse = requests.get(f"https://anime-sama.fr/catalogue/?page={page}")
+                # reponse = requests.get(f"https://anime-sama.org/catalogue/?page={page}")
+                
+                scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                reponse = scraper.get(f"https://anime-sama.org/catalogue/?page={page}")
+                
 
                 if reponse.status_code == 200:
                     source = reponse.content
@@ -62,7 +66,9 @@ class Cardinal:
                             Titre = h1.get_text(strip=True) if h1 else "Titre introuvable"
                             link = soupPrimordial.get('href')
 
-                            secondRequest = requests.get(link)
+                            # secondRequest = requests.get(link)
+                            scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                            secondRequest = scraper.get(link)
                             secondSoup = BeautifulSoup(secondRequest.text, 'lxml')
                             titre_alter = secondSoup.find('h2', id="titreAlter")
                             if titre_alter:
@@ -102,7 +108,9 @@ class Cardinal:
             
     def serchAnime(search, limit):  #Ajouter de quoi afficher sur la liste final les titre alternatif si il y en a
         try:
-            animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
+            # animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
+            scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+            animes_data = scraper.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
         except requests.exceptions.RequestException as e:
             print(f"Erreur lors de la récupération des animes: {e}")
             return []
@@ -164,12 +172,16 @@ class Cardinal:
     
     def getInfoAnime(querry): # Voir pour proposer un lien de scan par défaut ou non 
         animes = []
-        data = requests.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
+        # data = requests.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        data = scraper.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
 
         base_url = data[0]["lien"]
         title = data[0]["title"]
 
-        reponse = requests.get(base_url)
+        # reponse = requests.get(base_url)
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        reponse = scraper.get(base_url)
         soup = BeautifulSoup(reponse.text, 'html.parser')
 
         scripts = soup.find_all("script")
@@ -193,7 +205,6 @@ class Cardinal:
                 # scan_url.append({
                 #     "scan_url" :base_url + "/scan/vf"
                 #     })
-
         return animes#, scan_url
     
     def getAnimeLink(nom, saison, version): # Recupère les different lien disponible affin de retourner une playlist complete et prete a être télécharger
@@ -203,7 +214,9 @@ class Cardinal:
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
         
-        reponse = requests.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+        # reponse = requests.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        reponse = scraper.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
 
         base_url = reponse[0]["base_url"]
         saison_num = saison.lower()
@@ -213,9 +226,13 @@ class Cardinal:
             link = f"{base_url}{saison_num}/{version}"
         
         else:
-            link = f"{base_url}{saison_num}/{version}"        
+            link = f"{base_url}/{saison_num}/{version}"   
+
+        # print(link)
         
-        second = requests.get(link)
+        # second = requests.get(link)
+        second = scraper.get(link)
+
         soup = BeautifulSoup(second.text, 'html.parser')
         
         script_tag = soup.find("script", src=lambda s: s and "episodes.js" in s)
@@ -224,7 +241,8 @@ class Cardinal:
 
         jsfile = f"{link}/{js_link}" # Lien du fichier contenant tous les lien vers les differents episode
 
-        js_text = requests.get(jsfile).text
+        # js_text = requests.get(jsfile).text
+        js_text = scraper.get(jsfile).text
         matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
         all_eps = {
@@ -238,7 +256,9 @@ class Cardinal:
         
         for episode in range(nombre_episodes):
             try :
-                reponse = requests.get(all_eps[lecteur][episode],headers=headers, timeout=10)
+                # reponse = requests.get(all_eps[lecteur][episode],headers=headers, timeout=10)
+                scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                reponse = scraper.get(all_eps[lecteur][episode], headers=headers, timeout=10)
 
                 analyse = any(site in all_eps[lecteur][episode] for site in allowed_sites)
 
@@ -279,7 +299,10 @@ class Cardinal:
                         error_ep = e['episode']
                         # print(all_eps[lecteur_er][error_ep])
 
-                        reponse = requests.get(all_eps[lecteur_er][error_ep], headers=headers, timeout=10)
+                        # reponse = requests.get(all_eps[lecteur_er][error_ep], headers=headers, timeout=10)
+                        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                        reponse = scraper.get(all_eps[lecteur_er][error_ep], headers=headers, timeout=10)
+
                         # print(reponse.status_code)
                         analyse = any(site in all_eps[lecteur_er][error_ep] for site in allowed_sites)
 

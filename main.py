@@ -5,7 +5,7 @@ except ImportError:
 
 class Api:
     @staticmethod
-    def launch(debug_state: bool = True, reload_status: bool = False):
+    def launch(debug_state: bool = True, reload_status: bool = True):
         Yui.app.run(debug=debug_state, use_reloader=reload_status)
 
 if __name__ == "__main__":
