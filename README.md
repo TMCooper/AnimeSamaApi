@@ -1839,7 +1839,9 @@ pip install --upgrade -r requirements.txt
 
 ---
 
-**Version de la documentation :** 1.0.0  
-**Dernière mise à jour :** 31 octobre 2024  
-**Auteur :** [Votre nom]  
+**Version de la documentation :** 1.0.1 
+**Dernière mise à jour :** 11 Novembre 2024  
+**Auteur :** TMCooper 
 **Licence :** MIT
+
+(La documentation a été faite avec l'IA)
