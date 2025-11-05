@@ -67,16 +67,16 @@ class Cardinal:
                             link = soupPrimordial.get('href')
 
                             # secondRequest = requests.get(link)
-                            scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                            secondRequest = scraper.get(link)
-                            secondSoup = BeautifulSoup(secondRequest.text, 'lxml')
-                            titre_alter = secondSoup.find('h2', id="titreAlter")
-                            if titre_alter:
-                                AlterTitle = titre_alter.get_text(strip=True)
+                            # scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                            # secondRequest = scraper.get(link)
+                            # secondSoup = BeautifulSoup(secondRequest.text, 'lxml')
+                            # titre_alter = secondSoup.find('h2', id="titreAlter")
+                            # if titre_alter:
+                                # AlterTitle = titre_alter.get_text(strip=True)
                             
                             data.append({
                                 "title" : Titre,
-                                "AlterTitle" : AlterTitle,
+                                # "AlterTitle" : AlterTitle,
                                 "link" : link
                             })
 
