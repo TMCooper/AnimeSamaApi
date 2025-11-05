@@ -68,8 +68,8 @@ class Cardinal:
                             link_tag = card.find('a')
                             link = link_tag.get('href')
                             
-                            print(titre)
-                            print(link)
+                            # print(titre)
+                            # print(link)
                             
                             data.append({
                                 "title" : titre,
