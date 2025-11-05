@@ -40,13 +40,14 @@ class Cardinal:
         os.makedirs(PATH_DIR, exist_ok=True) # Verifi l'existance du dossier data/json
 
         while True:
+            # print(f"On est la {page}")
             if not os.path.exists(PATH_ANIME) or reset == "True":
                 # reponse = requests.get(f"https://anime-sama.org/catalogue/?page={page}")
                 
                 scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
                 reponse = scraper.get(f"https://anime-sama.org/catalogue/?page={page}")
+                # print(reponse.text)
                 
-
                 if reponse.status_code == 200:
                     source = reponse.content
                     soup = BeautifulSoup(source, 'lxml')
@@ -58,25 +59,20 @@ class Cardinal:
                         
                         return "Recuperation achever"
                     else:
-                        for soupPrimordial in soup.find_all('a', class_ = "flex divide-x"):
-                            for tag in soupPrimordial.select('img, p, hr'):
-                                tag.extract() # Enlève les balise non interessante d'abord de notre soupPrimordial
-                            
-                            h1 = soupPrimordial.find('h1')
-                            Titre = h1.get_text(strip=True) if h1 else "Titre introuvable"
-                            link = soupPrimordial.get('href')
+                        cards = soup.find_all('div', class_="shrink-0 catalog-card card-base")
+                        
+                        for card in cards:    
+                            title_tag = card.find('h2', class_="card-title")
+                            titre = title_tag.get_text(strip=True) if title_tag else "Titre introuvable"
 
-                            # secondRequest = requests.get(link)
-                            # scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                            # secondRequest = scraper.get(link)
-                            # secondSoup = BeautifulSoup(secondRequest.text, 'lxml')
-                            # titre_alter = secondSoup.find('h2', id="titreAlter")
-                            # if titre_alter:
-                                # AlterTitle = titre_alter.get_text(strip=True)
+                            link_tag = card.find('a')
+                            link = link_tag.get('href')
+                            
+                            print(titre)
+                            print(link)
                             
                             data.append({
-                                "title" : Titre,
-                                # "AlterTitle" : AlterTitle,
+                                "title" : titre,
                                 "link" : link
                             })
 
