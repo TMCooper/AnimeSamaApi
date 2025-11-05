@@ -14,8 +14,9 @@ PATH_EXEC = os.getcwd()
 PATH_DOWNLOAD = os.path.join(PATH_EXEC, "logs")
 os.makedirs(PATH_DOWNLOAD, exist_ok=True)
 
+# Revoir cette fonction pour quel fonctionne mieux au seins du programme probabilité de logs useless trop elever
 def log_error(anime_title, season_number, episode_number, error):
-    log_file = os.path.join(PATH_DOWNLOAD, "error_log.txt")
+    log_file = os.path.join(PATH_DOWNLOAD, "error_log_m3u8.txt")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = f"[{timestamp}] Échec pour {anime_title} {season_number} Épisode : {episode_number}: {error}\n"
     with open(log_file, 'a', encoding='utf-8') as f:
