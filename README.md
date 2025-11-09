@@ -28,6 +28,9 @@ Cette API REST permet de rechercher, récupérer et accéder aux informations d'
 
 ---
 
+## Potentiel nouvelle feature
+- Scan support ?
+
 ## Installation
 
 ### Prérequis
