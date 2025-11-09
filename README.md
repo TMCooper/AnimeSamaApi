@@ -30,6 +30,7 @@ Cette API REST permet de rechercher, récupérer et accéder aux informations d'
 
 ## Potentiel nouvelle feature
 - Scan support ?
+- Ou vous pouvez en suggerer vous même [ici](https://github.com/TMCooper/Anime-Sama-Downloader/discussions/categories/ideas)
 
 ## Installation
 
