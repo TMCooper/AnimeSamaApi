@@ -5,9 +5,18 @@ except ImportError:
 
 class Api:
     @staticmethod
-    def launch(port=5000, debug_state: bool = True, reload_status: bool = True):
+    def launch(port=5000, ip="127.0.0.1", debug_state: bool = True, reload_status: bool = True):
+        """
+        Lance l'application Yui avec les paramètres spécifiés.
+
+        Args:
+            port (int): Port sur lequel l'application sera accessible. Default 5000.
+            ip (str): Adresse IP d'écoute. Default "127.0.0.1".
+            debug_state (bool): Active le mode debug. Default True.
+            reload_status (bool): Active le reloader automatique. Default True.
+        """
         Yui.app.run(
-            # host="0.0.0.0", # Peut être plus tard si l'api dois être accèssible a tous le reseaux
+            host=ip,
             port=port,
             debug=debug_state, 
             use_reloader=reload_status
