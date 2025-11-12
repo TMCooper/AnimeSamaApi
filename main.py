@@ -1,9 +1,12 @@
 try:
     from .src.api import *
+    from .src.utils.config import Config
 except ImportError:
     from src.api import *
+    from src.utils.config import Config
 
 class Api:
+    
     @staticmethod
     def launch(port=5000, ip="127.0.0.1", debug_state: bool = True, reload_status: bool = True):
         """
@@ -15,6 +18,10 @@ class Api:
             debug_state (bool): Active le mode debug. Default True.
             reload_status (bool): Active le reloader automatique. Default True.
         """
+
+        Config.IP = ip
+        Config.PORT = port
+
         Yui.app.run(
             host=ip,
             port=port,

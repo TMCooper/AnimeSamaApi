@@ -20,7 +20,9 @@ class Yui:
             return jsonify({
                 'Bonjours' : "Je suis une api...",
                 'Valeur q ' : q,
-                'Cardinal value' : cardinal
+                'Cardinal value' : cardinal,
+                'IP': Config.IP,
+                'PORT': Config.PORT
             })
     
     @app.route('/api/getAllAnime', methods=["GET"])

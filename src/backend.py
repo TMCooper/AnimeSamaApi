@@ -4,8 +4,10 @@ from bs4 import BeautifulSoup
 
 try :
     from .utils.m3u8 import extract_m3u8_from_page
+    from src.utils.config import Config
 except ImportError:
     from src.utils.m3u8 import extract_m3u8_from_page
+    from src.utils.config import Config
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, r"data\json")
@@ -88,7 +90,7 @@ class Cardinal:
             with open(PATH_ANIME, "r", encoding="utf-8") as data:
                 return json.load(data)
         else:
-            return "Fichier non existant velliez request : http://127.0.0.1:5000/api/getAllAnime"
+            return f"Fichier non existant velliez request : http://{Config.IP}:{Config.PORT}/api/getAllAnime"
         
     def clean_string(text):
         """Une fonction pour nettoyer et normaliser une chaîne de caractères."""
@@ -106,7 +108,7 @@ class Cardinal:
         try:
             # animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
             scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-            animes_data = scraper.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
+            animes_data = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/loadBaseAnimeData").json()
         except cloudscraper.exceptions.RequestException as e:
             print(f"Erreur lors de la récupération des animes: {e}")
             return []
@@ -170,7 +172,7 @@ class Cardinal:
         animes = []
         # data = requests.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        data = scraper.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
+        data = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSerchAnime?q={querry}").json()
 
         base_url = data[0]["lien"]
         title = data[0]["title"]
@@ -205,7 +207,7 @@ class Cardinal:
     
     def getSpecificAnime(nom, saison=None, version=None):
         scraper = cloudscraper.create_scraper()
-        reponse = scraper.get(f"http://127.0.0.1:5000/api/getInfoAnime?q={nom}").json()
+        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getInfoAnime?q={nom}").json()
 
         # Vérifier que saison n'est pas vide
         if not saison:
@@ -247,7 +249,7 @@ class Cardinal:
         
         # reponse = requests.get(f"http://127.0.0.1:5000/api/getSpecificAnime?q={nom}&s={saison}").json()
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        reponse = scraper.get(f"http://127.0.0.1:5000/api/getSpecificAnime?q={nom}&s={saison}").json()
+        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
 
         base_url = reponse["base_url"]
 
