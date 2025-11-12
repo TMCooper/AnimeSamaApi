@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 
 try :
     from .utils.m3u8 import extract_m3u8_from_page
-    from src.utils.config import Config
+    from .utils.config import Config
 except ImportError:
     from src.utils.m3u8 import extract_m3u8_from_page
     from src.utils.config import Config
