@@ -1,4 +1,4 @@
-import json, os, re, asyncio, cloudscraper, requests
+import json, os, re, asyncio, cloudscraper, requests, unicodedata
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
@@ -74,7 +74,7 @@ class Cardinal:
                             # print(link)
                             
                             data.append({
-                                "title" : titre,
+                                "title" : Cardinal.normalize_title(titre),
                                 "link" : link
                             })
 
@@ -91,7 +91,31 @@ class Cardinal:
                 return json.load(data)
         else:
             return f"Fichier non existant velliez request : http://{Config.IP}:{Config.PORT}/api/getAllAnime"
-        
+    
+    def normalize_title(title):
+        if not title:
+            return ""
+
+        # Normalize les accents en standards
+        title = unicodedata.normalize("NFKD", title)
+        title = "".join([c for c in title if not unicodedata.combining(c)])
+
+        # Converti les guillemets spéciaux en guillemets simples
+        title = title.replace("“", "\"").replace("”", "\"")
+        title = title.replace("‘", "'").replace("’", "'")
+
+        # Remplacer les caractères interdits JSON ou filesystem
+        forbidden = r'[\/\\\:\*\?\"\<\>\|]'
+        title = re.sub(forbidden, " ", title)
+
+        # Nettoyer les caractères non alphanumériques excessifs
+        title = re.sub(r"[^a-zA-Z0-9\-\_\&\.\'\#\s]", " ", title)
+
+        # Réduire espaces multiples
+        title = re.sub(r"\s+", " ", title).strip()
+
+        return title
+    
     def clean_string(text):
         """Une fonction pour nettoyer et normaliser une chaîne de caractères."""
         if not text:
