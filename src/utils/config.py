@@ -22,7 +22,7 @@ class Utils:
         remote_hash = Utils.get_hash(f'origin/{branch}')
 
         if local_hash != remote_hash:
-            print("Please update the code : git pull")
+            print("Please update the code : git pull origin main")
             exit(1)
 
     def gitCheck():
