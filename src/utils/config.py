@@ -1,4 +1,4 @@
-import subprocess, shutil, os
+import subprocess, shutil, os, sys
 
 class Config:
     IP = "127.0.0.1"   # valeur par défaut
@@ -35,7 +35,7 @@ class Utils:
 
         if local_hash != remote_hash:
             print("Please update the code : git pull origin main")
-            exit(1)
+            sys.xit(1)
 
     def gitCheck():
         if shutil.which("git") is None:
