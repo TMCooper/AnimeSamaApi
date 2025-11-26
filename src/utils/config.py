@@ -35,9 +35,9 @@ class Utils:
 
         if local_hash != remote_hash:
             print("Please update the code : git pull origin main")
-            sys.xit(1)
+            os._exit(1)
 
     def gitCheck():
         if shutil.which("git") is None:
             print("Please install git")
-            exit(1)
+            os._exit(1)
