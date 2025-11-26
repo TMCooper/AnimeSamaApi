@@ -388,9 +388,8 @@ class Cardinal:
                         # print(f"{len(m3u8_for_missing)} liens M3U8 supplémentaires ont été trouvés.")
                         for item in m3u8_for_missing:
                             item["episode"] = item["episode"] - 1
-                            good_link.append(item)
-
-                    # Trier la liste finale pour qu'elle soit dans l'ordre
+                            good_link.append(item) # Trier la liste finale pour qu'elle soit dans l'ordre
+                
                 else:
                     print(f"Impossible de construire l'URL de base pour la saison {saison}")
                                         
