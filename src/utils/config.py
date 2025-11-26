@@ -16,26 +16,26 @@ class Utils:
             ).decode().strip()
 
     def hashCheck():
-            subprocess.run(
-                ['git', 'fetch'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                cwd=Utils.MODULE_ROOT
-            )
+        subprocess.run(
+            ['git', 'fetch'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=Utils.MODULE_ROOT
+        )
 
-            # Courante
-            branch = subprocess.check_output(
-                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                cwd=Utils.MODULE_ROOT
-            ).decode().strip()
+        # Courante
+        branch = subprocess.check_output(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd=Utils.MODULE_ROOT
+        ).decode().strip()
 
-            # Hash local & distant
-            local_hash = Utils.get_hash('HEAD')
-            remote_hash = Utils.get_hash(f'origin/{branch}')
+        # Hash local & distant
+        local_hash = Utils.get_hash('HEAD')
+        remote_hash = Utils.get_hash(f'origin/{branch}')
 
-            if local_hash != remote_hash:
-                print("Please update the code : git pull")
-                exit(1)
+        if local_hash != remote_hash:
+            print("Please update the code : git pull origin main")
+            exit(1)
 
     def gitCheck():
         if shutil.which("git") is None:
