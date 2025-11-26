@@ -1,9 +1,9 @@
 try:
     from .src.api import *
-    from .src.utils.config import Config
+    from .src.utils.config import Config, Utils
 except ImportError:
     from src.api import *
-    from src.utils.config import Config
+    from src.utils.config import Config, Utils
 
 class Api:
     
@@ -18,6 +18,9 @@ class Api:
             debug_state (bool): Active le mode debug. Default True.
             reload_status (bool): Active le reloader automatique. Default True.
         """
+
+        Utils.hashCheck()
+        Utils.gitCheck()
 
         Config.IP = ip
         Config.PORT = port

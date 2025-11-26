@@ -396,14 +396,3 @@ class Cardinal:
                                         
                 good_link.sort(key=lambda x: x.get('episode', 0))
                 return good_link
-
-        
-        # print(error)
-        # print(error[5]) # Pour iterer les erreur a terme
-
-        # print(js_text)
-        
-        # return link
-
-        # saison_num = reponse.text
-        # print(saison_nu)
