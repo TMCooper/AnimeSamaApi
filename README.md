@@ -10,6 +10,7 @@
 6. [Exemples d'utilisation](#exemples-dutilisation)
 7. [Gestion des erreurs](#gestion-des-erreurs)
 8. [Limitations et notes techniques](#limitations-et-notes-techniques)
+9. [Patch](#patch)
 
 ---
 
@@ -463,5 +464,8 @@ Pour toute question ou bug, vérifiez :
 1. Les logs dans `logs/error_log.txt`
 2. La console Flask pour les erreurs de scraping
 3. La disponibilité du site source
+
+# Patch
+- Le bug lié à la mise a jour du domaine vers .eu est corriger voir l’[issue #2](../../issues/2).
 
 ---
