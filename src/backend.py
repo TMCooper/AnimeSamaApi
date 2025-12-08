@@ -12,6 +12,7 @@ except ImportError:
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, r"data\json")
 PATH_ANIME = os.path.join(PATH_DIR, "AnimeInfo.json")
+BASE_URL = "https://anime-sama.eu"
 
 headers = {
     "Accept": "*/*",
@@ -44,10 +45,10 @@ class Cardinal:
         while True:
             # print(f"On est la {page}")
             if not os.path.exists(PATH_ANIME) or reset == "True":
-                # reponse = requests.get(f"https://anime-sama.org/catalogue/?page={page}")
+                # reponse = requests.get(f"{BASE_URL}/catalogue/?page={page}")
                 
                 scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                reponse = scraper.get(f"https://anime-sama.org/catalogue/?page={page}")
+                reponse = scraper.get(f"{BASE_URL}/catalogue/?page={page}")
                 # print(reponse.text)
                 
                 if reponse.status_code == 200:
