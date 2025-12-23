@@ -12,7 +12,7 @@ except ImportError:
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, r"data\json")
 PATH_ANIME = os.path.join(PATH_DIR, "AnimeInfo.json")
-BASE_URL = "https://anime-sama.eu"
+BASE_URL = "https://anime-sama.si"
 
 headers = {
     "Accept": "*/*",
