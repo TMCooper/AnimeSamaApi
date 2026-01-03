@@ -276,9 +276,9 @@ class Cardinal:
         # print(f"Recherche de : {repr(saison_norm)}")  # Debug
 
         for i, s in enumerate(saisons_normalized):
-            print(f"{i} {repr(s)} == {repr(saison_norm)}")
+            # print(f"{i} {repr(s)} == {repr(saison_norm)}")
             if s == saison_norm:
-                print("Trouvé :", reponse[i])
+                # print("Trouvé :", reponse[i])
                 return reponse[i]
 
         # print(f"Aucune correspondance trouvée pour '{saison}'")
