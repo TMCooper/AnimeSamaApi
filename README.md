@@ -84,6 +84,7 @@ projet/
 | `backend.py` | Logique métier et scraping |
 | `m3u8.py` | Extraction des liens M3U8 via Playwright |
 | `Mita.py` | Utilitaires pour l'automatisation navigateur |
+| `utils.py`| Utilitaire pour la recuperation automatique de l'url actif |
 
 ### Flux de données
 
@@ -331,6 +332,18 @@ http://127.0.0.1:5000/api/getAnimeLink?n=Spy%20x%20Family&s=saison1&v=vostfr
 ```
 
 **Note** : Cette fonction tente plusieurs lecteurs et sources pour garantir la disponibilité de tous les épisodes.
+
+### 8. Recuperation du lien actif de anime-sama
+```
+http://127.0.0.1:5000/api/getAnimeSamaURL
+```
+
+**Réponse** :
+```json
+https://...
+```
+
+**Note** : L'endpoint ici renvoie bêtement le lien actif de anime sama prete a utilisation direct pour être stocker en variable par exemple
 
 ---
 
