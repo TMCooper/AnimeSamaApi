@@ -24,6 +24,11 @@ class Yui:
                 'IP': Config.IP,
                 'PORT': Config.PORT
             })
+        
+    @app.route('/api/getAnimeSamaURL', methods=["GET"])
+    def getAnimeSamaURL():
+        reponse = Cardinal.findLink()
+        return jsonify(reponse)
     
     @app.route('/api/getAllAnime', methods=["GET"])
     def getAllAnime():
