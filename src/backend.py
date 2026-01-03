@@ -5,14 +5,16 @@ from bs4 import BeautifulSoup
 try :
     from .utils.m3u8 import extract_m3u8_from_page
     from .utils.config import Config
+    from .utils.utils import Utils
 except ImportError:
     from src.utils.m3u8 import extract_m3u8_from_page
     from src.utils.config import Config
+    from src.utils.utils import Utils
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, r"data\json")
 PATH_ANIME = os.path.join(PATH_DIR, "AnimeInfo.json")
-BASE_URL = "https://anime-sama.si"
+BASE_URL = Utils.findLink()
 
 headers = {
     "Accept": "*/*",
@@ -34,7 +36,10 @@ headers = {
 }
 
 class Cardinal:
-    
+
+    def findLink():
+        return BASE_URL
+        
     def getAllAnime(reset="False"):
         
         data = []
@@ -89,9 +94,30 @@ class Cardinal:
     def loadBaseAnimeData():
         if os.path.exists(PATH_ANIME) == True:
             with open(PATH_ANIME, "r", encoding="utf-8") as data:
-                return json.load(data)
+                anime_data = json.load(data)
+                
+                if BASE_URL:
+                    # Extraire le domaine de BASE_URL (ex: "anime-sama.si")
+                    base_domain = BASE_URL.replace("https://", "").replace("http://", "").rstrip("/")
+                    
+                    # Initialiser la variable AVANT la boucle
+                    needs_refresh = False
+                    
+                    # Vérifier si au moins un lien dans les données utilise un mauvais domaine
+                    for anime in anime_data:
+                        if "link" in anime:
+                            anime_link = anime["link"]
+                            # Vérifier si le lien contient le bon domaine
+                            if base_domain not in anime_link:
+                                needs_refresh = True
+                                break  # Un seul suffit pour déclencher l'actualisation complète
+                    
+                    if needs_refresh:
+                        requests.get(f"http://{Config.IP}:{Config.PORT}/api/getAllAnime?r=True")
+                
+                return anime_data
         else:
-            return f"Fichier non existant velliez request : http://{Config.IP}:{Config.PORT}/api/getAllAnime"
+            return f"Fichier non existant veuillez request : http://{Config.IP}:{Config.PORT}/api/getAllAnime"
     
     def normalize_title(title):
         if not title:
@@ -230,9 +256,9 @@ class Cardinal:
                 #     })
         return animes#, scan_url
     
-    def getSpecificAnime(nom, saison=None, version=None):
+    def getSpecificAnime(nom, saison=None, version=None): # Syntaxe exemple nom, saison, version : spice%20and%20wolf&s=saison1&v=vostfr
         scraper = cloudscraper.create_scraper()
-        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getInfoAnime?q={nom}").json()
+        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getInfoAnime?q={nom}").json() 
 
         # Vérifier que saison n'est pas vide
         if not saison:
@@ -250,9 +276,9 @@ class Cardinal:
         # print(f"Recherche de : {repr(saison_norm)}")  # Debug
 
         for i, s in enumerate(saisons_normalized):
-            # print(f"{i} {repr(s)} == {repr(saison_norm)}")
+            print(f"{i} {repr(s)} == {repr(saison_norm)}")
             if s == saison_norm:
-                # print("Trouvé :", reponse[i])
+                print("Trouvé :", reponse[i])
                 return reponse[i]
 
         # print(f"Aucune correspondance trouvée pour '{saison}'")
