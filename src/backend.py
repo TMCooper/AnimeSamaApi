@@ -38,7 +38,7 @@ headers = {
 class Cardinal:
 
     def findLink():
-        return BASE_URL
+        return {"url": BASE_URL}
         
     def getAllAnime(reset="False"):
         
