@@ -340,7 +340,11 @@ http://127.0.0.1:5000/api/getAnimeSamaURL
 
 **Réponse** :
 ```json
-https://...
+[
+  {
+    "url": "https://anime-sama.tv"
+  }
+]
 ```
 
 **Note** : L'endpoint ici renvoie bêtement le lien actif de anime sama prete a utilisation direct pour être stocker en variable par exemple
