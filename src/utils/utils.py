@@ -79,10 +79,7 @@ class Utils:
                 
             if main_domain:
                 # print(f"\nDOMAINE PRINCIPAL: {main_domain}")
-                url_final.append({
-                        'url': main_domain
-                    })
-                return url_final
+                return main_domain
             else:
                 print("\nAucun domaine principal trouvé (code 200)")
                 return None
