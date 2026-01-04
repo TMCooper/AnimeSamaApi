@@ -22,6 +22,7 @@ class Utils:
             
             main_domain = None
             results = []
+            url_final = []
             
             for domain in domains:
                 # print(f"Vérification de : {domain}")
@@ -78,7 +79,10 @@ class Utils:
                 
             if main_domain:
                 # print(f"\nDOMAINE PRINCIPAL: {main_domain}")
-                return main_domain
+                url_final.append({
+                        'url': main_domain
+                    })
+                return url_final
             else:
                 print("\nAucun domaine principal trouvé (code 200)")
                 return None
