@@ -23,15 +23,12 @@ Cette API REST permet de rechercher, récupérer et accéder aux informations d'
 - Catalogue complet d'animes avec titres alternatifs
 - Recherche floue avec scoring intelligent
 - Récupération d'informations détaillées par anime
-- Extraction automatique des liens M3U8 pour le streaming
+- Extraction automatique des liens (Mp4/M3U8) via résolveurs HTTP-only
 - Support multi-saisons et multi-versions (VOSTFR/VF)
-- L'api peut toute a fait traité les saison / film / oav t'en qu'il existe
+- L'api peut tout à fait traiter les saisons / films / OAV tant qu'ils existent
+- **100% sans navigateur** (Playwright supprimé pour plus de performance)
 
 ---
-
-## Potentiel nouvelle feature
-- Scan support ?
-- Enlever les dependance playright pour passer en full request
 
 ## Installation
 
@@ -48,12 +45,6 @@ Installez les dépendances nécessaires :
 pip install -r requirements.txt
 ```
 
-Pour l'extraction M3U8 (fonctionnalité avancée), installez Chromium pour Playwright :
-
-```cmd
-playwright install chromium
-```
-
 ### Structure des fichiers
 
 Assurez-vous que votre projet respecte cette structure :
@@ -65,8 +56,8 @@ projet/
 │   ├── api.py
 │   ├── backend.py
 │   └── utils/
-│       ├── m3u8.py
-│       └── Mita.py
+│       ├── resolvers.py
+│       └── utils.py
 └── data/
     └── json/
         └── AnimeInfo.json (généré automatiquement)
@@ -83,9 +74,8 @@ projet/
 | `main.py` | Point d'entrée de l'application |
 | `api.py` | Définition des routes Flask |
 | `backend.py` | Logique métier et scraping |
-| `m3u8.py` | Extraction des liens M3U8 via Playwright |
-| `Mita.py` | Utilitaires pour l'automatisation navigateur |
-| `utils.py`| Utilitaire pour la recuperation automatique de l'url actif |
+| `resolvers.py` | Résolution HTTP-only des liens Sibnet, Vidmoly, SmoothPre, SendVid |
+| `utils.py`| Utilitaire pour la récupération automatique de l'url actif |
 
 ### Flux de données
 
@@ -409,15 +399,9 @@ print(f"Épisodes disponibles : {len(links)}")
 - Anime non présent dans le catalogue
 - Score de similarité < 75
 
-**3. Timeout lors de l'extraction M3U8**
+**3. Site non supporté**
 
-```
-Timeout sur Lecteur 2
-```
-
-**Cause** : Le lecteur sélectionné ne répond pas dans les 15 secondes.
-
-**Solution** : L'API teste automatiquement les autres lecteurs disponibles.
+Si un hébergeur n'est pas dans la liste des sites autorisés ou échoue à la résolution, l'épisode peut être manquant dans la liste finale.
 
 ---
 
@@ -427,12 +411,11 @@ Timeout sur Lecteur 2
 
 - **Première récupération du catalogue** : 10-20 minutes (4000+ animes)
 - **Recherche** : < 1 seconde
-- **Extraction de liens** : 2-5 secondes par saison (sans M3U8)
-- **Extraction M3U8** : 15-30 secondes par épisode manquant
+- **Extraction de liens** : 1-3 secondes par saison (via HTTP direct)
 
 ### Restrictions
 
-1. **Taux de requêtes** : Pas de limite implémentée, mais Cloudflare peut bloquer en cas d'abus, il en va de même pour le site que l'on request un cooldown est présent pour evité ça
+1. **Taux de requêtes** : Pas de limite implémentée, mais Cloudflare peut bloquer en cas d'abus.
 2. **Dépendance externe** : Nécessite que anime-sama.org soit accessible
 
 ### Stratégie de fallback
@@ -441,49 +424,23 @@ L'endpoint `/api/getAnimeLink` implémente une stratégie en cascade :
 
 1. Tente le lecteur par défaut (eps1)
 2. En cas d'échec, teste tous les lecteurs disponibles
-3. Pour les épisodes manquants, lance l'extraction via Playwright
+3. Utilise les résolveurs `src/utils/resolvers.py` pour extraire les liens directs sans navigateur.
 4. Retourne tous les liens trouvés triés par numéro d'épisode
 
 ### Logs et debugging
 
-Les erreurs d'extraction M3U8 sont enregistrées dans :
-
-```
-logs/error_log.txt
-```
-
-Format :
-```
-[2025-11-04 14:30:12] Échec pour Anime X Saison 1 Épisode : 5: Timeout
-```
-
-### Configuration avancée
-
-**Modifier les headers de requête** (dans `backend.py`) :
-
-```python
-headers = {
-    "User-Agent": "Votre User-Agent personnalisé",
-    # ...
-}
-```
-
-**Changer le timeout M3U8** (dans `m3u8.py`) :
-
-```python
-await asyncio.wait_for(new_m3u8_event.wait(), timeout=30)  # 30 secondes
-```
+Les endpoints utilisent `cloudscraper` pour contourner les protections Cloudflare.
 
 ---
 
 ## Support et contribution
 
 Pour toute question ou bug, vérifiez :
-1. Les logs dans `logs/error_log.txt`
-2. La console Flask pour les erreurs de scraping
-3. La disponibilité du site source
+1. La console Flask pour les erreurs de scraping
+2. La disponibilité du site source
 
 # Patch
 - Le bug lié à la mise a jour du domaine vers .eu est corriger voir l’[issue #2](../../issues/2).
+- Suppression complète de Playwright et passage à une résolution 100% HTTP.
 
 ---
