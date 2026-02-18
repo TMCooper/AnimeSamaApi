@@ -1,13 +1,13 @@
-import json, os, re, asyncio, cloudscraper, requests, unicodedata
+import json, os, re, cloudscraper, requests, unicodedata
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
 try :
-    from .utils.m3u8 import extract_m3u8_from_page
+    from .utils.resolvers import resolve_video_url
     from .utils.config import Config
     from .utils.utils import Utils
 except ImportError:
-    from src.utils.m3u8 import extract_m3u8_from_page
+    from src.utils.resolvers import resolve_video_url
     from src.utils.config import Config
     from src.utils.utils import Utils
 
@@ -294,7 +294,8 @@ class Cardinal:
 
         error = []
         good_link = []
-        allowed_sites = ["video.sibnet.ru"]
+        allowed_sites = ["video.sibnet.ru", "sibnet.ru", "vidmoly.to", "vidmoly.net", 
+                         "smoothpre.com", "vidhide.com", "streamwish.com", "sendvid.com"]
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
         
@@ -351,21 +352,21 @@ class Cardinal:
 
                 analyse = any(site in all_eps[lecteur][episode] for site in allowed_sites)
 
-                if reponse.status_code != 200 or reponse.status_code == 200 and analyse == False:
+                if analyse:
+                    resolved = resolve_video_url(all_eps[lecteur][episode])
+                    if resolved and resolved["url"]:
+                        good_link.append({
+                            "episode" : episode,
+                            "url" : resolved["url"]
+                        })
+                        if len(good_link) == nombre_episodes:
+                            return good_link
+                else:
                     error.append({
                         "lecteur" : lecteur,
                         "episode" : episode,
                         "url" : all_eps[lecteur][episode]
                     })
-                    continue
-
-                elif reponse.status_code == 200 and analyse:
-                    good_link.append({
-                        "episode" : episode,
-                        "url" : all_eps[lecteur][episode]
-                    })
-                    if len(good_link) == nombre_episodes:
-                        return good_link
 
             except requests.ConnectionError:
                 # print("Erreur le serveur a fermer la connection...")
@@ -383,66 +384,23 @@ class Cardinal:
                 lecteur_er = f"eps{lecteur_num}"
 
                 for e in error.copy():
+                    error_ep = e['episode']
+                    url_to_test = all_eps[lecteur_er][error_ep]
+                    
+                    analyse = any(site in url_to_test for site in allowed_sites)
 
-                    try:
-                        error_ep = e['episode']
-                        # print(all_eps[lecteur_er][error_ep])
-
-                        # reponse = requests.get(all_eps[lecteur_er][error_ep], headers=headers, timeout=10)
-                        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                        reponse = scraper.get(all_eps[lecteur_er][error_ep], headers=headers, timeout=10)
-
-                        # print(reponse.status_code)
-                        analyse = any(site in all_eps[lecteur_er][error_ep] for site in allowed_sites)
-
-                        if reponse.status_code != 200 or reponse.status_code != 200 and analyse == False:
-                            new_error.append({
-                                "lecteur": lecteur_er,
-                                "episode": error_ep,
-                                "url": all_eps[lecteur_er][error_ep]
-                            })
-                            continue
-                        
-                        if reponse.status_code == 200 and analyse:
+                    if analyse:
+                        resolved = resolve_video_url(url_to_test)
+                        if resolved and resolved["url"]:
                             good_link.append({
                                 "episode": error_ep,
-                                "url": all_eps[lecteur_er][error_ep]
+                                "url": resolved["url"]
                             })
 
-                            # print(len(good_link))
                             if len(good_link) == nombre_episodes:
+                                good_link.sort(key=lambda x: x.get('episode', 0))
                                 return good_link
-
-                    except requests.ConnectionError:
-                        # print("Erreur : le serveur a fermé la connexion...")
-                        new_error.append({
-                            "lecteur": lecteur_er,
-                            "episode": error_ep,
-                            "url": all_eps[lecteur_er][error_ep]
-                        })
-                        continue
-
-            if len(good_link) < nombre_episodes:
-                episodes_trouves = [item["episode"] for item in good_link]
-                episodes_attendus = list(range(nombre_episodes))
-                episodes_manquants = [ep for ep in episodes_attendus if ep not in episodes_trouves]
-
-                # print(f"Il manque {len(episodes_manquants)} épisode qui est : {episodes_manquants}")
-                episode_numbers_to_search = [index + 1 for index in episodes_manquants] 
-                # print(f"Lancement de la recherche pour le(s) numéro(s) d'épisode(s) : {episode_numbers_to_search}")
-
-                if base_url:
-                    m3u8_for_missing = asyncio.run(extract_m3u8_from_page(link, episode_numbers_to_search))
-                        
-                    # On ajoute les nouveaux liens trouvés à notre liste principale
-                    if m3u8_for_missing:
-                        # print(f"{len(m3u8_for_missing)} liens M3U8 supplémentaires ont été trouvés.")
-                        for item in m3u8_for_missing:
-                            item["episode"] = item["episode"] - 1
-                            good_link.append(item) # Trier la liste finale pour qu'elle soit dans l'ordre
-                
-                else:
-                    print(f"Impossible de construire l'URL de base pour la saison {saison}")
-                                        
-                good_link.sort(key=lambda x: x.get('episode', 0))
-                return good_link
+                                
+            # Si on arrive ici, il manque encore des épisodes
+            good_link.sort(key=lambda x: x.get('episode', 0))
+            return good_link
