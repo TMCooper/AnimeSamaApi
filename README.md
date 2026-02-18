@@ -31,6 +31,7 @@ Cette API REST permet de rechercher, récupérer et accéder aux informations d'
 
 ## Potentiel nouvelle feature
 - Scan support ?
+- Enlever les dependance playright pour passer en full request
 
 ## Installation
 
