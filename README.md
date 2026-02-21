@@ -426,10 +426,6 @@ L'endpoint `/api/getAnimeLink` implémente une stratégie en cascade :
 3. Utilise les résolveurs `src/utils/resolvers.py` pour extraire les liens directs sans navigateur.
 4. Retourne tous les liens trouvés triés par numéro d'épisode
 
-### Logs et debugging
-
-Les endpoints utilisent `cloudscraper` pour contourner les protections Cloudflare.
-
 ---
 
 ## Support et contribution
