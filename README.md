@@ -26,7 +26,6 @@ Cette API REST permet de rechercher, récupérer et accéder aux informations d'
 - Extraction automatique des liens (Mp4/M3U8) via résolveurs HTTP-only
 - Support multi-saisons et multi-versions (VOSTFR/VF)
 - L'api peut tout à fait traiter les saisons / films / OAV tant qu'ils existent
-- **100% sans navigateur** (Playwright supprimé pour plus de performance)
 
 ---
 
@@ -441,6 +440,6 @@ Pour toute question ou bug, vérifiez :
 
 # Patch
 - Le bug lié à la mise a jour du domaine vers .eu est corriger voir l’[issue #2](../../issues/2).
-- Suppression complète de Playwright et passage à une résolution 100% HTTP.
+- Suppression complète de Playwright.
 
 ---
