@@ -1,6 +1,5 @@
 import re
-import cloudscraper
-import requests
+import cloudscraper # type: ignore
 from urllib.parse import urlparse
 
 # --- Configuration & Headers ---
@@ -35,21 +34,6 @@ def _decode_pack(p, a, c, k_str):
 # ============================================================
 #  Resolvers
 # ============================================================
-
-def resolve_sibnet(url):
-    """
-    Sibnet resolver. If direct extraction fails (403), returns original URL 
-    as it's currently handled by the user's frontend/backend.
-    """
-    try:
-        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=10)
-        if r.status_code == 200:
-            match = re.search(r'src:\s*["\'](/v/[^"\']+)["\']', r.text)
-            if match:
-                return {"url": "https://video.sibnet.ru" + match.group(1), "type": "mp4"}
-    except:
-        pass
-    return {"url": url, "type": "embed"} # Fallback to original embed URL
 
 def resolve_vidmoly(url):
     """
@@ -121,8 +105,6 @@ def resolve_sendvid(url):
 # ============================================================
 
 RESOLVER_MAP = {
-    "video.sibnet.ru": resolve_sibnet,
-    "sibnet.ru": resolve_sibnet,
     "vidmoly.to": resolve_vidmoly,
     "vidmoly.net": resolve_vidmoly,
     "smoothpre.com": resolve_smoothpre,
