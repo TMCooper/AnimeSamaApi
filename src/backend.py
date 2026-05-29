@@ -234,15 +234,15 @@ class Cardinal:
         soup = BeautifulSoup(reponse.text, 'html.parser')
 
         scripts = soup.find_all("script")
-        pattern = re.compile(r'panneauAnime\("([^"]+)",\s*"([^"]+)"\)')
+        pattern = re.compile(r'panneau(?:Anime|Film|Scan|Visual)\s*\(\s*(["\'])(.*?)\1\s*,\s*(["\'])(.*?)\3\s*\)')
 
         for script in scripts:
-            if script.string:  # Vérifie qu'il contient bien du texte
-                text = re.sub(r'/\*.*?\*/', '', script.string, flags=re.DOTALL)
+            if script.text:  # Vérifie qu'il contient bien du texte
+                text = re.sub(r'/\*.*?\*/', '', script.text, flags=re.DOTALL)
                 matches = pattern.findall(text)
-                for nom, lien in matches:
+                for quote1, nom, quote2, lien in matches:
                     if nom.lower() != "nom" and lien.lower() != "url":
-                        saison_url = base_url + "/" + lien
+                        saison_url = base_url.rstrip("/") + "/" + lien.lstrip("/")
                         animes.append({
                             "base_url": base_url,
                             "title": title,
@@ -250,10 +250,6 @@ class Cardinal:
                             "url": saison_url
                         })
 
-                # scan_url = []
-                # scan_url.append({
-                #     "scan_url" :base_url + "/scan/vf"
-                #     })
         return animes#, scan_url
     
     def getSpecificAnime(nom, saison=None, version=None): # Syntaxe exemple nom, saison, version : spice%20and%20wolf&s=saison1&v=vostfr
