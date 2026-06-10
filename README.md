@@ -408,14 +408,14 @@ Si un hébergeur n'est pas dans la liste des sites autorisés ou échoue à la r
 
 ### Performance
 
-- **Première récupération du catalogue** : 10-20 minutes (4000+ animes)
+- **Première récupération du catalogue** : 3-5 minutes (4000+ animes)
 - **Recherche** : < 1 seconde
 - **Extraction de liens** : 1-3 secondes par saison (via HTTP direct)
 
 ### Restrictions
 
 1. **Taux de requêtes** : Pas de limite implémentée, mais Cloudflare peut bloquer en cas d'abus.
-2. **Dépendance externe** : Nécessite que anime-sama.org soit accessible
+2. **Dépendance externe** : Nécessite que anime-sama.pw soit accessible
 
 ### Stratégie de fallback
 
