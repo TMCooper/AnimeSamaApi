@@ -1,3 +1,4 @@
+import requests
 import json, os, re, cloudscraper, requests, unicodedata
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
@@ -290,7 +291,8 @@ class Cardinal:
 
         error = []
         good_link = []
-        allowed_sites = ["video.sibnet.ru", "sibnet.ru", "vidmoly.to", "vidmoly.net", 
+        # video.sibnet.ru et sibnet.ru retirer le domaine sibnet ne semble plus être actif
+        allowed_sites = ["vidmoly.to", "vidmoly.net", 
                          "smoothpre.com", "vidhide.com", "streamwish.com", "sendvid.com"]
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
@@ -318,6 +320,7 @@ class Cardinal:
         
         # second = requests.get(link)
         second = scraper.get(link)
+        # print(second)
 
         soup = BeautifulSoup(second.text, 'html.parser')
         
@@ -326,7 +329,6 @@ class Cardinal:
         js_link = js_str.split('src="')[1].split('" type="')[0] # Exemple de sortie : episodes.js?filever=5306
 
         jsfile = f"{link}/{js_link}" # Lien du fichier contenant tous les lien vers les differents episode
-
         # js_text = requests.get(jsfile).text
         js_text = scraper.get(jsfile).text
         matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
@@ -337,24 +339,24 @@ class Cardinal:
         }
 
         nombre_lecteurs = sum(1 for lecteur_num in all_eps if lecteur_num.startswith('eps')) # Renvoie le nombre de lecteur max disponible
-        # print(nombre_lecteurs)
         nombre_episodes = len(all_eps.get("eps1", [])) # Renvoie le nombre de fois a boucler pour avoir tous les épisode
-        
+
         for episode in range(nombre_episodes):
             try :
-                # reponse = requests.get(all_eps[lecteur][episode],headers=headers, timeout=10)
-                scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                reponse = scraper.get(all_eps[lecteur][episode], headers=headers, timeout=10)
-
                 analyse = any(site in all_eps[lecteur][episode] for site in allowed_sites)
 
                 if analyse:
+                    # reponse = requests.get(all_eps[lecteur][episode],headers=headers, timeout=10)
+                    scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+                    reponse = scraper.get(all_eps[lecteur][episode], headers=headers, timeout=10)
+                    
                     resolved = resolve_video_url(all_eps[lecteur][episode])
                     if resolved and resolved["url"]:
                         good_link.append({
                             "episode" : episode,
                             "url" : resolved["url"]
                         })
+                        print(f"good_link : {good_link}")
                         if len(good_link) == nombre_episodes:
                             return good_link
                 else:
@@ -364,8 +366,8 @@ class Cardinal:
                         "url" : all_eps[lecteur][episode]
                     })
 
-            except requests.ConnectionError:
-                # print("Erreur le serveur a fermer la connection...")
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.RequestException) as err:
+                print(err)
                 error.append({
                     "lecteur" : lecteur,
                     "episode" : episode,
