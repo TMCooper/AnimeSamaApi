@@ -35,9 +35,10 @@ class Utils:
 
         if local_hash != remote_hash:
             print("Please update AnimeSamaApi : git pull origin main")
-            os._exit(1)
+            input("Press Enter to continue...")
 
     def gitCheck():
         if shutil.which("git") is None:
             print("Please install git")
+            input("Press Enter to exit...")
             os._exit(1)
