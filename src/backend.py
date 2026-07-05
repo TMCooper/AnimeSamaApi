@@ -291,8 +291,7 @@ class Cardinal:
 
         error = []
         good_link = []
-        # video.sibnet.ru et sibnet.ru retirer le domaine sibnet ne semble plus être actif
-        allowed_sites = ["vidmoly.to", "vidmoly.net", 
+        allowed_sites = ["video.sibnet.ru", "sibnet.ru", "vidmoly.to", "vidmoly.net",  
                          "smoothpre.com", "vidhide.com", "streamwish.com", "sendvid.com"]
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
@@ -356,7 +355,6 @@ class Cardinal:
                             "episode" : episode,
                             "url" : resolved["url"]
                         })
-                        print(f"good_link : {good_link}")
                         if len(good_link) == nombre_episodes:
                             return good_link
                 else:
@@ -367,7 +365,6 @@ class Cardinal:
                     })
 
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.RequestException) as err:
-                print(err)
                 error.append({
                     "lecteur" : lecteur,
                     "episode" : episode,
