@@ -1,4 +1,4 @@
-import cloudscraper, re, requests
+import cloudscraper, re, requests, json
 
 URL_PW = "https://anime-sama.pw"
 
@@ -85,3 +85,21 @@ class Utils:
                 return None
         
         return None
+
+
+    def transform_chapters(data: bytes, title: str) -> dict:
+        chapters = json.loads(data.decode("utf-8"))
+
+        # Structure de base
+        result = {
+            "title": title,
+            "max_chapter": len(chapters)
+        }
+
+        sorted_chapters = sorted(chapters.items(), key=lambda item: int(item[0]))
+
+        # Ajout des chapitres au format "chapitre n"
+        for chapter_num, nb_images in sorted_chapters:
+            result[f"{chapter_num}"] = nb_images
+
+        return result

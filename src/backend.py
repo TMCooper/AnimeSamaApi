@@ -400,3 +400,45 @@ class Cardinal:
             # Si on arrive ici, il manque encore des épisodes
             good_link.sort(key=lambda x: x.get('episode', 0))
             return good_link
+
+
+    def getScanLink(nom, chap=None):
+
+        if not chap:
+            chap = "all"
+
+        resolve_json = {}
+
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        chap_information = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getScanHashmap?n={nom}").json()
+
+        title = chap_information["title"]
+
+        if chap == "all":
+            for chapitre in range(1, chap_information["max_chapter"] + 1): # La variable chapitre contien seulement l'id du chapitre que l'on analyse
+                chap_key = f"Chapitre {chapitre}"
+                resolve_json[chap_key] = []
+                # Renvoie le nombre de page qu'il va faloir loop pour recuperer toute les images : chap_information[f"Chapitre {chapitre}"]
+                for images in range (1, chap_information[f"{chapitre}"] + 1):
+                    resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chapitre}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
+        else:
+            chap_key = f"Chapitre {chap}"
+            resolve_json[chap_key] = []
+            for images in range(chap_information[f"{chap}"]):    
+                resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chap}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
+
+        return resolve_json
+
+    def getScanHashmap(nom):
+        saison = "scans"
+
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
+
+        # Lien typique que l'on vise pour les informations de base : https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre=Frieren
+        title = reponse["title"]
+
+        chap_hashmap = scraper.get(f"https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre={title}")
+        chap_information = Utils.transform_chapters(chap_hashmap.content, nom)
+
+        return chap_information

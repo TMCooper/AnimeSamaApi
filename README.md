@@ -324,6 +324,9 @@ http://127.0.0.1:5000/api/getAnimeLink?n=Spy%20x%20Family&s=saison1&v=vostfr
 **Note** : Cette fonction tente plusieurs lecteurs et sources pour garantir la disponibilité de tous les épisodes.
 
 ### 8. Recuperation du lien actif de anime-sama
+
+**GET** `api/getAnimeSamaURL`
+
 ```
 http://127.0.0.1:5000/api/getAnimeSamaURL
 ```
@@ -339,6 +342,79 @@ http://127.0.0.1:5000/api/getAnimeSamaURL
 
 **Note** : L'endpoint ici renvoie bêtement le lien actif de anime sama prete a utilisation direct pour être stocker en variable par exemple
 
+### 9. Informations et structure des chapitres d'un scan
+
+Récupère les métadonnées de scan pour un manga donné (titre exact reconnu et nombre d'images par chapitre).
+
+**Paramètres** :
+
+- `n` (obligatoire) : Nom du manga
+
+**Exemple** :
+
+```
+http://127.0.0.1:5000/api/getScanHashmap?n=Frieren
+```
+
+**Réponse** :
+```json
+{
+  "title": "Frieren",
+  "max_chapter": 130,
+  "1": 25,
+  "2": 21,
+  "3": 20
+}
+```
+
+### 10. Extraction des liens d'images de scans
+
+Génère la liste complète des URL d'images pour un chapitre spécifique ou pour l'ensemble de la œuvre.
+
+**Paramètres** :
+
+- `n` (obligatoire) : Nom du manga
+
+- `c` (optionnel) : Numéro du chapitre souhaité (ex: 2). Si non renseigné ou omis, retourne la totalité des chapitres disponibles (all).
+
+**Exemple (Chapitre spécifique)** :
+
+```
+http://127.0.0.1:5000/api/getScanLink?n=Frieren&c=2
+```
+
+**Réponse** :
+
+```json
+{
+  "Chapitre 2": [
+    "https://anime-sama.to/s2/scans/Frieren/2/1.jpg",
+    "https://anime-sama.to/s2/scans/Frieren/2/2.jpg",
+    "https://anime-sama.to/s2/scans/Frieren/2/3.jpg",
+    "https://anime-sama.to/s2/scans/Frieren/2/4.jpg"
+  ]
+}
+```
+**Exemple (Tous les chapitres)** :
+
+```
+http://127.0.0.1:5000/api/getScanLink?n=Frieren
+```
+
+**Réponse** :
+
+```json
+{
+  "Chapitre 1": [
+    "https://anime-sama.to/s2/scans/Frieren/1/1.jpg",
+    "https://anime-sama.to/s2/scans/Frieren/1/2.jpg"
+  ],
+  "Chapitre 2": [
+    "https://anime-sama.to/s2/scans/Frieren/2/1.jpg",
+    "https://anime-sama.to/s2/scans/Frieren/2/2.jpg"
+  ]
+}
+```
 ---
 
 ## Exemples d'utilisation
@@ -435,6 +511,7 @@ Pour toute question ou bug, vérifiez :
 2. La disponibilité du site source
 
 # Patch
+- Ajout de la gestion et de l'extraction automatique des liens de scans/mangas (/api/getScanHashmap et /api/getScanLink)
 - Le bug lié à la mise a jour du domaine vers .eu est corriger voir l’[issue #2](../../issues/2).
 - Suppression complète de Playwright.
 

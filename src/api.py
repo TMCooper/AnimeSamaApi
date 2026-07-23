@@ -92,3 +92,22 @@ class Yui:
             return jsonify({"error": "Paramètre 'n' manquant"}), 400
         
         return jsonify(Cardinal.getAnimeLink(nom, saison, version))
+
+    @app.route('/api/getScanLink', methods=["GET"])
+    def getScanLink():
+        nom = request.args.get("n", "").strip()
+        chaptitre = request.args.get("c", "").strip() # Chapitre (est un int ex : &c=2) servira a viser un chapitre spécifique par défaut il résouts la totalité des liens disponibles
+
+        if not nom:
+            return jsonify({"error": "Paramètre 'n' manquant"}), 400
+
+        return jsonify(Cardinal.getScanLink(nom, chaptitre))
+
+    @app.route('/api/getScanHashmap', methods=["GET"])
+    def getScanHashmap():
+        nom = request.args.get("n", "").strip()
+
+        if not nom:
+            return jsonify({"error": "Paramètre 'n' manquant"}), 400
+
+        return jsonify(Cardinal.getScanHashmap(nom))
