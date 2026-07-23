@@ -419,12 +419,12 @@ class Cardinal:
                 chap_key = f"Chapitre {chapitre}"
                 resolve_json[chap_key] = []
                 # Renvoie le nombre de page qu'il va faloir loop pour recuperer toute les images : chap_information[f"Chapitre {chapitre}"]
-                for images in range (1, chap_information[f"{chapitre}"] + 1):
+                for images in range (1, chap_information[str(chapitre)] + 1):
                     resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chapitre}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
         else:
             chap_key = f"Chapitre {chap}"
             resolve_json[chap_key] = []
-            for images in range(chap_information[f"{chap}"]):    
+            for images in range(1, chap_information[str(chap)] + 1):
                 resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chap}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
 
         return resolve_json
