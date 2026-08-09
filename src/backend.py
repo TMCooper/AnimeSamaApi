@@ -303,7 +303,7 @@ class Cardinal:
         error = []
         good_link = []
         # "video.sibnet.ru", "sibnet.ru" domaine sibnet il ne semble pas stable
-        allowed_sites = ["vidmoly.to", "vidmoly.net",  
+        allowed_sites = ["video.sibnet.ru", "sibnet.ru", "vidmoly.to", "vidmoly.net",  
                          "smoothpre.com", "vidhide.com", "streamwish.com", "sendvid.com"]
         lecteur_num = 1
         lecteur = f"eps{lecteur_num}"
