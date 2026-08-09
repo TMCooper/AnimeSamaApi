@@ -13,7 +13,7 @@ except ImportError:
     from src.utils.utils import Utils
 
 PATH = os.path.dirname(os.path.abspath(__file__))
-PATH_DIR = os.path.join(PATH, r"data\json")
+PATH_DIR = os.path.join(PATH, "data", "json")
 PATH_ANIME = os.path.join(PATH_DIR, "AnimeInfo.json")
 BASE_URL = Utils.findLink()
 
@@ -47,50 +47,61 @@ class Cardinal:
         page = 1
 
         os.makedirs(PATH_DIR, exist_ok=True) # Verifi l'existance du dossier data/json
+        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
 
-        while True:
-            # print(f"On est la {page}")
-            if not os.path.exists(PATH_ANIME) or reset == "True":
-                # reponse = requests.get(f"{BASE_URL}/catalogue/?page={page}")
+        if os.path.exists(PATH_ANIME) and reset != "True":
+            return "Fichier déjà existant. Ajoutez l'argument reset='True' pour tout actualiser."
+
+        first_response = scraper.get(f"{BASE_URL}/catalogue")
+        if first_response.status_code != 200:
+            return first_response.status_code
+
+        soup_init = BeautifulSoup(first_response.content, 'lxml')
+        pagination_links = soup_init.find_all('a', class_=["p-3", "pagination-link", "rounded-md"])
+
+        page_numbers = []
+        for link in pagination_links:
+            text = link.get_text(strip=True)
+            if text.isdigit():  # On vérifie bien que c'est un nombre pur
+                page_numbers.append(int(text))
+
+        max_pages = max(page_numbers) if page_numbers else 1
+        # print(f"Nombre total de pages détecté : {max_pages}")
+        
+        for page in range(1, max_pages + 1):
+            reponse = scraper.get(f"{BASE_URL}/catalogue/?page={page}")
+            # print(reponse.text)
                 
-                scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                reponse = scraper.get(f"{BASE_URL}/catalogue/?page={page}")
-                # print(reponse.text)
-                
-                if reponse.status_code == 200:
-                    source = reponse.content
-                    soup = BeautifulSoup(source, 'lxml')
+            if reponse.status_code != 200:
+                return reponse.status_code
+            
+            source = reponse.content
+            soup = BeautifulSoup(source, 'lxml')
 
-                    if soup.find_all('p', class_ = "text-white font-bold text-2xl h-96 p-5"):
-                        # print(page)
-                        with open(PATH_ANIME, "w", encoding='utf-8') as t:
-                            json.dump(data, t, ensure_ascii=False, indent=2)
-                        
-                        return "Recuperation achever"
-                    else:
-                        cards = soup.find_all('div', class_="shrink-0 catalog-card card-base")
-                        
-                        for card in cards:    
-                            title_tag = card.find('h2', class_="card-title")
-                            titre = title_tag.get_text(strip=True) if title_tag else "Titre introuvable"
+            titles = soup.find_all('h2', class_="card-title")
 
-                            link_tag = card.find('a')
-                            link = link_tag.get('href')
+            for title_tag in titles:    
+                card_link = title_tag.find_parent('a')
+
+                titre = title_tag.get_text(strip=True)
+                link = card_link.get('href')
+
+                img_tag = card_link.find('img', class_="card-image")
+                img_src = img_tag.get('src') if img_tag else ""
                             
-                            # print(titre)
-                            # print(link)
+                # print(titre)
+                # print(link)
                             
-                            data.append({
-                                "title" : Cardinal.normalize_title(titre),
-                                "link" : link
-                            })
+                data.append({
+                    "title" : Cardinal.normalize_title(titre),
+                    "link" : link,
+                    "cover" : img_src
+                })
 
-                    # print(f"Page : {page}")
-                    page += 1
-                else:
-                    return reponse.status_code
-            else:
-                return "Fichier déjà existant ajouté l'argument = r=True pour tous actualiser"
+        with open(PATH_ANIME, "w", encoding='utf-8') as t:
+            json.dump(data, t, ensure_ascii=False, indent=2)
+
+        return "Recuperation achever"
 
     def loadBaseAnimeData():
         if os.path.exists(PATH_ANIME) == True:
