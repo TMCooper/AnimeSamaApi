@@ -100,16 +100,62 @@ def resolve_sendvid(url):
         pass
     return None
 
+def resolve_sibnet(url):
+    """
+    Sibnet resolver. Extracts direct mp4 stream link from video.sibnet.ru shell page.
+    """
+    try:
+        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=10)
+        match = re.search(r'player\.src\(\[\s*\{\s*src:\s*["\'](/v/[^"\']+)["\']', r.text)
+        if not match:
+            match = re.search(r'["\'](/v/[^"\']+\.mp4[^"\']*)["\']', r.text)
+        if match:
+            return {"url": "https://video.sibnet.ru" + match.group(1), "type": "mp4"}
+    except:
+        pass
+    return None
+
+def resolve_ansembed(url):
+    """
+    Ansembed / Movembed resolver. Extracts m3u8 playlist URL from player page.
+    """
+    try:
+        r = scraper.get(url, headers={**HEADERS, "Referer": url}, timeout=10)
+        match = re.search(r'file\s*:\s*["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
+        if not match:
+            match = re.search(r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
+        if match:
+            return {"url": match.group(1), "type": "m3u8"}
+    except:
+        pass
+    return None
+
+def resolve_embed4me(url):
+    """
+    Embed4me / Lplayer resolver. Validates embed4me URLs for playback.
+    """
+    return {"url": url, "type": "embed"}
+
 # ============================================================
 #  Dispatcher
 # ============================================================
 
 RESOLVER_MAP = {
+    "video.sibnet.ru": resolve_sibnet,
+    "sibnet.ru": resolve_sibnet,
+    "ansembed.net": resolve_ansembed,
+    "ansembed.com": resolve_ansembed,
+    "lpayer.embed4me.com": resolve_embed4me,
+    "embed4me.com": resolve_embed4me,
+    "player.embed4me.com": resolve_embed4me,
     "vidmoly.to": resolve_vidmoly,
     "vidmoly.net": resolve_vidmoly,
+    "vidmoly.me": resolve_vidmoly,
     "smoothpre.com": resolve_smoothpre,
     "vidhide.com": resolve_smoothpre,
+    "vidhidepro.com": resolve_smoothpre,
     "streamwish.com": resolve_smoothpre,
+    "streamwish.to": resolve_smoothpre,
     "sendvid.com": resolve_sendvid,
 }
 
