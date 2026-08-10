@@ -367,7 +367,9 @@ class Cardinal:
 
         # Parcours épisode par épisode en testant les lecteurs dans l'ordre (eps1 -> eps2 -> ...)
         for episode in range(nombre_episodes):
-            resolved_ep = False
+            best_link = None
+            fallback_link = None
+
             for lecteur in lecteurs:
                 eps_list = all_eps[lecteur]
                 if episode >= len(eps_list):
@@ -380,25 +382,22 @@ class Cardinal:
                     try:
                         resolved = resolve_video_url(url_to_test)
                         if resolved and resolved.get("url"):
-                            good_link.append({
-                                "episode": episode,
-                                "url": resolved["url"]
-                            })
-                            resolved_ep = True
-                            break
+                            res_type = resolved.get("type", "raw")
+                            # Si le résolveur extrait un lien direct vidéo (m3u8 ou mp4), on le sélectionne immédiatement
+                            if res_type in ["m3u8", "mp4"]:
+                                best_link = resolved["url"]
+                                break
+                            elif not fallback_link:
+                                fallback_link = resolved["url"]
                     except Exception:
                         pass
 
-            # Si aucun lecteur autorisé/résolu n'a fonctionné pour cet épisode, on prend l'URL brute du premier lecteur disponible
-            if not resolved_ep:
-                for lecteur in lecteurs:
-                    eps_list = all_eps[lecteur]
-                    if episode < len(eps_list):
-                        good_link.append({
-                            "episode": episode,
-                            "url": eps_list[episode]
-                        })
-                        break
+            final_url = best_link or fallback_link
+            if final_url:
+                good_link.append({
+                    "episode": episode,
+                    "url": final_url
+                })
 
         return good_link
 
