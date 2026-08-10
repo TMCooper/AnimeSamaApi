@@ -167,7 +167,7 @@ class Cardinal:
         text = re.sub(r'\s+', ' ', text).strip()
         return text
             
-    def serchAnime(search, limit):  #Ajouter de quoi afficher sur la liste final les titre alternatif si il y en a
+    def serchAnime(search, limit):  # Ajouter de quoi afficher sur la liste finale les titres alternatifs s'il y en a
         try:
             # animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
             scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
@@ -240,7 +240,6 @@ class Cardinal:
         base_url = data[0]["lien"]
         title = data[0]["title"]
 
-        # reponse = requests.get(base_url)
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
         reponse = scraper.get(base_url)
         soup = BeautifulSoup(reponse.text, 'html.parser')
@@ -262,7 +261,7 @@ class Cardinal:
                             "url": saison_url
                         })
 
-        return animes#, scan_url
+        return animes
     
     def getSpecificAnime(nom, saison=None, version=None): # Syntaxe exemple nom, saison, version : spice%20and%20wolf&s=saison1&v=vostfr
         scraper = cloudscraper.create_scraper()
@@ -281,66 +280,73 @@ class Cardinal:
         saisons_normalized = [s.strip().lower().replace(" ", "") for s in saisons]
         saison_norm = saison.strip().lower().replace(" ", "")
         
-        # print(f"Recherche de : {repr(saison_norm)}")  # Debug
-
         for i, s in enumerate(saisons_normalized):
-            # print(f"{i} {repr(s)} == {repr(saison_norm)}")
             if s == saison_norm:
-                # print("Trouvé :", reponse[i])
                 return reponse[i]
 
-        # print(f"Aucune correspondance trouvée pour '{saison}'")
-        # print(f"Saisons disponibles : {saisons}")
+        # Si la saison demandée n'est pas trouvée par nom exact, retourner la première saison par défaut
+        if reponse and len(reponse) > 0:
+            return reponse[0]
+
         return None
         
-    def getAnimeLink(nom, saison=None, version=None): # Recupère les different lien disponible affin de retourner une playlist complete et prete a être télécharger
+    def getAnimeLink(nom, saison=None, version=None): # Recupère les différents liens disponibles afin de retourner une playlist complète et prête à être téléchargée
         
         if not saison:
             saison = "saison1"
         if not version:
             version = "vostfr"
 
-        error = []
         good_link = []
-        # "video.sibnet.ru", "sibnet.ru" domaine sibnet il ne semble pas stable
-        allowed_sites = ["video.sibnet.ru", "sibnet.ru", "vidmoly.to", "vidmoly.net",  
-                         "smoothpre.com", "vidhide.com", "streamwish.com", "sendvid.com"]
-        lecteur_num = 1
-        lecteur = f"eps{lecteur_num}"
+        # Liste étendue des hébergeurs vidéo supportés (Sibnet, Embed4me, Ansembed, Vidmoly, Smoothpre, Sendvid, etc.)
+        allowed_sites = [
+            "sibnet.ru", "video.sibnet.ru",
+            "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
+            "ansembed.net", "ansembed.com",
+            "vidmoly.to", "vidmoly.net", "vidmoly.me",
+            "smoothpre.com", "vidhide.com", "vidhidepro.com",
+            "streamwish.com", "streamwish.to",
+            "sendvid.com", "oneupload.to", "oneupload.net",
+            "filemoon.sx", "filemoon.to", "vidoza.net"
+        ]
         
-        # reponse = requests.get(f"http://127.0.0.1:5000/api/getSpecificAnime?q={nom}&s={saison}").json()
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
+        try:
+            reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
+        except Exception:
+            reponse = Cardinal.getSpecificAnime(nom, saison, version)
 
-        base_url = reponse["base_url"]
+        if not reponse or not isinstance(reponse, dict) or "url" not in reponse:
+            return []
+
+        base_url = reponse.get("base_url", "")
+        url = reponse["url"]
 
         saison_num = saison.lower().replace(" ", "")
         version = version.lower().replace(" ", "")
 
         if saison_num == "film":
-            url = reponse["url"]
             first_rewoks = url.lower().replace("//film", "/film")
             second_rewoks = first_rewoks.split("/vostfr")[0]
             link = f"{second_rewoks}/{version}"
         else:
-            url = reponse["url"]
             new_url = url.split("/vostfr")[0]
             link = f"{new_url}/{version}"
 
-        # print(link)
-        
-        # second = requests.get(link)
+        scraper = cloudscraper.create_scraper()
         second = scraper.get(link)
         # print(second)
 
         soup = BeautifulSoup(second.text, 'html.parser')
         
         script_tag = soup.find("script", src=lambda s: s and "episodes.js" in s)
-        js_str = str(script_tag)
-        js_link = js_str.split('src="')[1].split('" type="')[0] # Exemple de sortie : episodes.js?filever=5306
+        if not script_tag:
+            return []
 
-        jsfile = f"{link}/{js_link}" # Lien du fichier contenant tous les lien vers les differents episode
-        # js_text = requests.get(jsfile).text
+        js_str = str(script_tag)
+        js_link = js_str.split('src="')[1].split('"')[0]
+
+        jsfile = f"{link}/{js_link}" # Lien du fichier contenant tous les liens vers les différents épisodes
         js_text = scraper.get(jsfile).text
         matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
@@ -349,68 +355,52 @@ class Cardinal:
             for name, content in matches
         }
 
-        nombre_lecteurs = sum(1 for lecteur_num in all_eps if lecteur_num.startswith('eps')) # Renvoie le nombre de lecteur max disponible
-        nombre_episodes = len(all_eps.get("eps1", [])) # Renvoie le nombre de fois a boucler pour avoir tous les épisode
+        if not all_eps:
+            return []
 
+        # On trie les lecteurs disponibles (eps1, eps2, eps3, ...)
+        lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=lambda x: int(x.replace("eps", "") or 0))
+        if not lecteurs:
+            return []
+
+        nombre_episodes = max(len(all_eps[k]) for k in lecteurs)
+
+        # Parcours épisode par épisode en testant les lecteurs dans l'ordre (eps1 -> eps2 -> ...)
         for episode in range(nombre_episodes):
-            try :
-                analyse = any(site in all_eps[lecteur][episode] for site in allowed_sites)
+            resolved_ep = False
+            for lecteur in lecteurs:
+                eps_list = all_eps[lecteur]
+                if episode >= len(eps_list):
+                    continue
+
+                url_to_test = eps_list[episode]
+                analyse = any(site in url_to_test.lower() for site in allowed_sites)
 
                 if analyse:
-                    # reponse = requests.get(all_eps[lecteur][episode],headers=headers, timeout=10)
-                    scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-                    reponse = scraper.get(all_eps[lecteur][episode], headers=headers, timeout=10)
-                    
-                    resolved = resolve_video_url(all_eps[lecteur][episode])
-                    if resolved and resolved["url"]:
-                        good_link.append({
-                            "episode" : episode,
-                            "url" : resolved["url"]
-                        })
-                        if len(good_link) == nombre_episodes:
-                            return good_link
-                else:
-                    error.append({
-                        "lecteur" : lecteur,
-                        "episode" : episode,
-                        "url" : all_eps[lecteur][episode]
-                    })
-
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.RequestException) as err:
-                error.append({
-                    "lecteur" : lecteur,
-                    "episode" : episode,
-                    "url" : all_eps[lecteur][episode]
-                })
-                continue
-        
-        if error:
-            new_error = []
-
-            for lecteur_num in range(1, nombre_lecteurs + 1):
-                lecteur_er = f"eps{lecteur_num}"
-
-                for e in error.copy():
-                    error_ep = e['episode']
-                    url_to_test = all_eps[lecteur_er][error_ep]
-                    
-                    analyse = any(site in url_to_test for site in allowed_sites)
-
-                    if analyse:
+                    try:
                         resolved = resolve_video_url(url_to_test)
-                        if resolved and resolved["url"]:
+                        if resolved and resolved.get("url"):
                             good_link.append({
-                                "episode": error_ep,
+                                "episode": episode,
                                 "url": resolved["url"]
                             })
+                            resolved_ep = True
+                            break
+                    except Exception:
+                        pass
 
-                            if len(good_link) == nombre_episodes:
-                                good_link.sort(key=lambda x: x.get('episode', 0))
-                                return good_link
-                                
-            # Si on arrive ici, il manque encore des épisodes
-            good_link.sort(key=lambda x: x.get('episode', 0))
-            return good_link
+            # Si aucun lecteur autorisé/résolu n'a fonctionné pour cet épisode, on prend l'URL brute du premier lecteur disponible
+            if not resolved_ep:
+                for lecteur in lecteurs:
+                    eps_list = all_eps[lecteur]
+                    if episode < len(eps_list):
+                        good_link.append({
+                            "episode": episode,
+                            "url": eps_list[episode]
+                        })
+                        break
+
+        return good_link
 
 
     def getScanLink(nom, chap=None):
@@ -426,7 +416,7 @@ class Cardinal:
         title = chap_information["title"]
 
         if chap == "all":
-            for chapitre in range(1, chap_information["max_chapter"] + 1): # La variable chapitre contien seulement l'id du chapitre que l'on analyse
+            for chapitre in range(1, chap_information.get("max_chapter", 0) + 1): # La variable chapitre contient seulement l'id du chapitre que l'on analyse
                 chap_key = f"Chapitre {chapitre}"
                 resolve_json[chap_key] = []
                 # Renvoie le nombre de page qu'il va faloir loop pour recuperer toute les images : chap_information[f"Chapitre {chapitre}"]
@@ -448,7 +438,6 @@ class Cardinal:
 
         # Lien typique que l'on vise pour les informations de base : https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre=Frieren
         title = reponse["title"]
-
         chap_hashmap = scraper.get(f"https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre={title}")
         chap_information = Utils.transform_chapters(chap_hashmap.content, nom)
 
