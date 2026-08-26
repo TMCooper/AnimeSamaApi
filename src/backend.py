@@ -183,6 +183,8 @@ class Cardinal:
         # Utilisation de dictionnaires pour garantir l'unicité
         cleaned_to_original_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("title") for anime in animes_data if anime.get("title")}
         cleaned_to_id_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("link") for anime in animes_data if anime.get("title")}
+
+        cleaned_to_cover_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("cover") for anime in animes_data if anime.get("title")}
         
         cleaned_titles = list(cleaned_to_original_map.keys())
 
@@ -208,10 +210,13 @@ class Cardinal:
             original_title = cleaned_to_original_map.get(cleaned_title)
             anime_link = cleaned_to_id_map.get(cleaned_title)
 
+            anime_cover = cleaned_to_cover_map.get(cleaned_title)
+
             if original_title and anime_link:
                 temp_results.append({
                     "title": original_title,
                     "lien": anime_link,
+                    "cover": anime_cover,
                     "final_score": final_score
                 })
 
@@ -239,6 +244,7 @@ class Cardinal:
 
         base_url = data[0]["lien"]
         title = data[0]["title"]
+        cover = data[0].get("cover", "")
 
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
         reponse = scraper.get(base_url)
@@ -257,6 +263,7 @@ class Cardinal:
                         animes.append({
                             "base_url": base_url,
                             "title": title,
+                            "cover": cover,
                             "Saison": nom,
                             "url": saison_url
                         })
