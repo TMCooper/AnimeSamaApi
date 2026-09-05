@@ -306,8 +306,8 @@ class Cardinal:
 
         good_link = []
         # Liste étendue des hébergeurs vidéo supportés (Sibnet, Embed4me, Ansembed, Vidmoly, Smoothpre, Sendvid, etc.)
+        # "sibnet.ru", "video.sibnet.ru",
         allowed_sites = [
-            "sibnet.ru", "video.sibnet.ru",
             "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
             "ansembed.net", "ansembed.com",
             "vidmoly.to", "vidmoly.net", "vidmoly.me",
