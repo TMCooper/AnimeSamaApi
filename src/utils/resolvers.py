@@ -105,14 +105,14 @@ def resolve_sibnet(url):
     Sibnet resolver. Extracts direct mp4 stream link from video.sibnet.ru shell page.
     """
     try:
-        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=10)
+        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=3)
         match = re.search(r'player\.src\(\[\s*\{\s*src:\s*["\'](/v/[^"\']+)["\']', r.text)
         if not match:
             match = re.search(r'["\'](/v/[^"\']+\.mp4[^"\']*)["\']', r.text)
         if match: # Ai assist
             v_url = "https://video.sibnet.ru" + match.group(1)
             # Follow 302 redirect with Referer to obtain final direct CDN video link
-            r_302 = scraper.get(v_url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, allow_redirects=False, timeout=10)
+            r_302 = scraper.get(v_url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, allow_redirects=False, timeout=3)
             loc = r_302.headers.get("Location")
             if loc:
                 if loc.startswith("//"):

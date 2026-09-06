@@ -238,9 +238,9 @@ class Cardinal:
     
     def getInfoAnime(querry):
         animes = []
-        # data = requests.get(f"http://127.0.0.1:5000/api/getSerchAnime?q={querry}").json()
-        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        data = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSerchAnime?q={querry}").json()
+        data = Cardinal.serchAnime(querry, 5)
+        if not data:
+            return []
 
         base_url = data[0]["lien"]
         title = data[0]["title"]
@@ -271,8 +271,9 @@ class Cardinal:
         return animes
     
     def getSpecificAnime(nom, saison=None, version=None): # Syntaxe exemple nom, saison, version : spice%20and%20wolf&s=saison1&v=vostfr
-        scraper = cloudscraper.create_scraper()
-        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getInfoAnime?q={nom}").json() 
+        reponse = Cardinal.getInfoAnime(nom)
+        if not reponse or not isinstance(reponse, list):
+            return None
 
         # Vérifier que saison n'est pas vide
         if not saison:
@@ -288,7 +289,7 @@ class Cardinal:
         saison_norm = saison.strip().lower().replace(" ", "")
         
         for i, s in enumerate(saisons_normalized):
-            if s == saison_norm:
+            if s == saison_norm or (saison_norm in ["oav", "oavs"] and "oav" in s):
                 return reponse[i]
 
         # Si la saison demandée n'est pas trouvée par nom exact, retourner la première saison par défaut
@@ -317,12 +318,7 @@ class Cardinal:
             "filemoon.sx", "filemoon.to", "vidoza.net"
         ]
         
-        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        try:
-            reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
-        except Exception:
-            reponse = Cardinal.getSpecificAnime(nom, saison, version)
-
+        reponse = Cardinal.getSpecificAnime(nom, saison, version)
         if not reponse or not isinstance(reponse, dict) or "url" not in reponse:
             return []
 
@@ -334,10 +330,14 @@ class Cardinal:
 
         if saison_num == "film":
             first_rewoks = url.lower().replace("//film", "/film")
-            second_rewoks = first_rewoks.split("/vostfr")[0]
+            second_rewoks = re.sub(r'/(?:vostfr|vf)/?$', '', first_rewoks, flags=re.IGNORECASE)
+            link = f"{second_rewoks}/{version}"
+        elif saison_num in ["oav", "oavs"]:
+            first_rewoks = url.lower().replace("//oav", "/oav")
+            second_rewoks = re.sub(r'/(?:vostfr|vf)/?$', '', first_rewoks, flags=re.IGNORECASE)
             link = f"{second_rewoks}/{version}"
         else:
-            new_url = url.split("/vostfr")[0]
+            new_url = re.sub(r'/(?:vostfr|vf)/?$', '', url, flags=re.IGNORECASE)
             link = f"{new_url}/{version}"
 
         scraper = cloudscraper.create_scraper()
@@ -350,10 +350,10 @@ class Cardinal:
         if not script_tag:
             return []
 
-        js_str = str(script_tag)
-        js_link = js_str.split('src="')[1].split('"')[0]
+        src = script_tag.get("src", "")
+        js_link = src.split('"')[0].split("'")[0]
 
-        jsfile = f"{link}/{js_link}" # Lien du fichier contenant tous les liens vers les différents épisodes
+        jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}" # Lien du fichier contenant tous les liens vers les différents épisodes
         js_text = scraper.get(jsfile).text
         matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
@@ -376,6 +376,7 @@ class Cardinal:
         for episode in range(nombre_episodes):
             best_link = None
             fallback_link = None
+            raw_fallback = None
 
             for lecteur in lecteurs:
                 eps_list = all_eps[lecteur]
@@ -383,6 +384,9 @@ class Cardinal:
                     continue
 
                 url_to_test = eps_list[episode]
+                if not raw_fallback:
+                    raw_fallback = url_to_test
+
                 analyse = any(site in url_to_test.lower() for site in allowed_sites)
 
                 if analyse:
@@ -399,7 +403,7 @@ class Cardinal:
                     except Exception:
                         pass
 
-            final_url = best_link or fallback_link
+            final_url = best_link or fallback_link or raw_fallback
             if final_url:
                 good_link.append({
                     "episode": episode,
