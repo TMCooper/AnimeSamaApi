@@ -372,11 +372,12 @@ class Cardinal:
 
         nombre_episodes = max(len(all_eps[k]) for k in lecteurs)
 
-        # Parcours épisode par épisode en testant les lecteurs dans l'ordre (eps1 -> eps2 -> ...)
+        # Parcours épisode par épisode en testant tous les lecteurs disponibles
         for episode in range(nombre_episodes):
-            best_link = None
-            fallback_link = None
-            raw_fallback = None
+            best_link = None     # m3u8/mp4 résolu ou lien CDN direct signé (longue durée)
+            txt_fallback = None  # master.txt HLS (peut expirer rapidement)
+            fallback_link = None # URL embed retournée par un résolveur (type "embed")
+            raw_fallback = None  # URL brute non reconnue (sibnet, embed inconnu)
 
             for lecteur in lecteurs:
                 eps_list = all_eps[lecteur]
@@ -384,8 +385,6 @@ class Cardinal:
                     continue
 
                 url_to_test = eps_list[episode]
-                if not raw_fallback:
-                    raw_fallback = url_to_test
 
                 analyse = any(site in url_to_test.lower() for site in allowed_sites)
 
@@ -394,7 +393,7 @@ class Cardinal:
                         resolved = resolve_video_url(url_to_test)
                         if resolved and resolved.get("url"):
                             res_type = resolved.get("type", "raw")
-                            # Si le résolveur extrait un lien direct vidéo (m3u8 ou mp4), on le sélectionne immédiatement
+                            # Résolveur a trouvé un lien direct → priorité maximale, on arrête
                             if res_type in ["m3u8", "mp4"]:
                                 best_link = resolved["url"]
                                 break
@@ -402,8 +401,25 @@ class Cardinal:
                                 fallback_link = resolved["url"]
                     except Exception:
                         pass
+                else:
+                    # URL hors allowed_sites : détecter les liens CDN directs
+                    is_direct_m3u8 = bool(re.search(r'\.m3u8(\?|$)', url_to_test, re.IGNORECASE))
+                    is_direct_mp4  = bool(re.search(r'\.mp4(\?|$)',  url_to_test, re.IGNORECASE))
+                    is_hls_txt     = bool(re.search(r'master\.txt(\?|$)', url_to_test, re.IGNORECASE))
 
-            final_url = best_link or fallback_link or raw_fallback
+                    if (is_direct_m3u8 or is_direct_mp4) and not best_link:
+                        # Lien CDN m3u8/mp4 avec token signé longue durée → on break immédiatement
+                        best_link = url_to_test
+                        break
+                    elif is_hls_txt and not txt_fallback:
+                        # master.txt HLS : peut expirer vite → on continue à chercher mieux
+                        txt_fallback = url_to_test
+                    elif not raw_fallback:
+                        # Dernier recours : URL brute (sibnet, embed non supporté, etc.)
+                        raw_fallback = url_to_test
+
+            # Priorité : m3u8/mp4 résolu > CDN .txt fallback > embed > raw
+            final_url = best_link or txt_fallback or fallback_link or raw_fallback
             if final_url:
                 good_link.append({
                     "episode": episode,

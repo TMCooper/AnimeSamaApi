@@ -44,16 +44,20 @@ def resolve_vidmoly(url):
     url_net = url.replace("vidmoly.to", "vidmoly.net")
     try:
         r = scraper.get(url_net, headers={**HEADERS, "Referer": url_net}, timeout=10)
+        if r.status_code not in (200, 206):
+            return None
         
         # Follow JS redirect if present
         redirect_match = re.search(r"window\.location\.replace\('([^']+)'\)", r.text)
         if redirect_match:
             r = scraper.get(redirect_match.group(1), headers={**HEADERS, "Referer": url_net}, timeout=10)
+            if r.status_code not in (200, 206):
+                return None
             
         # Regex for m3u8 (supports both single and double quotes)
         match = re.search(r'file\s*:\s*["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
         if match:
-            return {"url": match.group(1), "type": "m3u8"}
+            return {"url": match.group(1).strip(), "type": "m3u8"}
     except:
         pass
     return None
@@ -66,6 +70,8 @@ def resolve_smoothpre(url):
     base_url = f"{parsed.scheme}://{parsed.netloc}"
     try:
         r = scraper.get(url, headers={**HEADERS, "Referer": base_url + "/"}, timeout=10)
+        if r.status_code not in (200, 206):
+            return None
         eval_match = re.search(r"eval\(function\(p,a,c,k,e,d\)\{.*?\}\('(.*?)',(\d+),(\d+),'(.*?)'\.split\('\|'\)\)\)", r.text, re.DOTALL)
         if eval_match:
             decoded = _decode_pack(eval_match.group(1), int(eval_match.group(2)), int(eval_match.group(3)), eval_match.group(4))
@@ -82,9 +88,12 @@ def resolve_smoothpre(url):
 def resolve_sendvid(url):
     """
     SendVid resolver. Extracts MP4 URL from <source> or og:video.
+    Returns None if content is unavailable (4xx/5xx).
     """
     try:
         r = scraper.get(url, headers={**HEADERS, "Referer": "https://sendvid.com/"}, timeout=10)
+        if r.status_code not in (200, 206):
+            return None  # Contenu supprimé ou inaccessible
         # Match <source src="..."> or property="og:video" content="..."
         match = re.search(r'<source\s+src="([^"]+\.mp4[^"]*)"', r.text)
         if not match:
@@ -103,16 +112,19 @@ def resolve_sendvid(url):
 def resolve_sibnet(url):
     """
     Sibnet resolver. Extracts direct mp4 stream link from video.sibnet.ru shell page.
+    Note: sibnet peut être bloqué selon la région. yt-dlp a un extracteur natif pour sibnet.
     """
     try:
-        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=3)
+        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=5)
+        if r.status_code not in (200, 206):
+            return None
         match = re.search(r'player\.src\(\[\s*\{\s*src:\s*["\'](/v/[^"\']+)["\']', r.text)
         if not match:
             match = re.search(r'["\'](/v/[^"\']+\.mp4[^"\']*)["\']', r.text)
-        if match: # Ai assist
-            v_url = "https://video.sibnet.ru" + match.group(1)
+        if match:
+            v_url = "https://video.sibnet.ru" + match.group(1).strip()
             # Follow 302 redirect with Referer to obtain final direct CDN video link
-            r_302 = scraper.get(v_url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, allow_redirects=False, timeout=3)
+            r_302 = scraper.get(v_url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, allow_redirects=False, timeout=5)
             loc = r_302.headers.get("Location")
             if loc:
                 if loc.startswith("//"):
@@ -133,19 +145,35 @@ def resolve_ansembed(url):
     """
     try:
         r = scraper.get(url, headers={**HEADERS, "Referer": url}, timeout=10)
+        if r.status_code not in (200, 206):
+            return None
         match = re.search(r'file\s*:\s*["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
         if not match:
             match = re.search(r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
         if match:
-            return {"url": match.group(1), "type": "m3u8"}
+            return {"url": match.group(1).strip(), "type": "m3u8"}
     except:
         pass
     return None
 
 def resolve_embed4me(url):
     """
-    Embed4me / Lplayer resolver. Validates embed4me URLs for playback.
+    Embed4me / Lplayer resolver. Tente d'extraire le m3u8 depuis la page du player.
+    Retourne l'URL embed en fallback si l'extraction échoue.
     """
+    try:
+        r = scraper.get(url, headers={**HEADERS, "Referer": url}, timeout=10)
+        if r.status_code not in (200, 206):
+            return None
+        # Chercher un lien m3u8 direct dans le HTML/JS
+        match = re.search(r'file\s*:\s*["\']( https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
+        if not match:
+            match = re.search(r'["\']( https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
+        if match:
+            return {"url": match.group(1).strip(), "type": "m3u8"}
+    except:
+        pass
+    # Fallback : retourner l'URL embed, yt-dlp tentera de la lire
     return {"url": url, "type": "embed"}
 
 # ============================================================
