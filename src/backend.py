@@ -306,9 +306,9 @@ class Cardinal:
             version = "vostfr"
 
         good_link = []
-        # Liste étendue des hébergeurs vidéo supportés (Sibnet, Embed4me, Ansembed, Vidmoly, Smoothpre, Sendvid, etc.)
-        # "sibnet.ru", "video.sibnet.ru",
+        # Liste étendue des hébergeurs vidéo supportés
         allowed_sites = [
+            "sibnet.ru", "video.sibnet.ru",
             "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
             "ansembed.net", "ansembed.com",
             "vidmoly.to", "vidmoly.net", "vidmoly.me",
@@ -342,7 +342,6 @@ class Cardinal:
 
         scraper = cloudscraper.create_scraper()
         second = scraper.get(link)
-        # print(second)
 
         soup = BeautifulSoup(second.text, 'html.parser')
         
@@ -353,7 +352,7 @@ class Cardinal:
         src = script_tag.get("src", "")
         js_link = src.split('"')[0].split("'")[0]
 
-        jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}" # Lien du fichier contenant tous les liens vers les différents épisodes
+        jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
         js_text = scraper.get(jsfile).text
         matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
@@ -365,7 +364,6 @@ class Cardinal:
         if not all_eps:
             return []
 
-        # On trie les lecteurs disponibles (eps1, eps2, eps3, ...)
         lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=lambda x: int(x.replace("eps", "") or 0))
         if not lecteurs:
             return []
@@ -374,52 +372,40 @@ class Cardinal:
 
         # Parcours épisode par épisode en testant tous les lecteurs disponibles
         for episode in range(nombre_episodes):
-            best_link = None     # m3u8/mp4 résolu ou lien CDN direct signé (longue durée)
-            txt_fallback = None  # master.txt HLS (peut expirer rapidement)
-            fallback_link = None # URL embed retournée par un résolveur (type "embed")
-            raw_fallback = None  # URL brute non reconnue (sibnet, embed inconnu)
-
+            best_link = None
+            fallback_link = None
+            raw_link = None
+            
             for lecteur in lecteurs:
                 eps_list = all_eps[lecteur]
                 if episode >= len(eps_list):
                     continue
 
                 url_to_test = eps_list[episode]
-
-                analyse = any(site in url_to_test.lower() for site in allowed_sites)
-
-                if analyse:
+                url_lower = url_to_test.lower()
+                
+                # vk et sibnet étant ceux qui semble les plus sur on une priorité plus elever que le reste
+                if "vk.com" in url_lower or "sibnet.ru" in url_lower:
                     try:
-                        resolved = resolve_video_url(url_to_test)
-                        if resolved and resolved.get("url"):
-                            res_type = resolved.get("type", "raw")
-                            # Résolveur a trouvé un lien direct → priorité maximale, on arrête
-                            if res_type in ["m3u8", "mp4"]:
-                                best_link = resolved["url"]
-                                break
-                            elif not fallback_link:
-                                fallback_link = resolved["url"]
+                        check = scraper.get(url_to_test, stream=True, timeout=3)
+                        if check.status_code < 400:
+                            best_link = url_to_test
+                            break  # Le lien prioritaire est en pingable, on arrête de chercher
                     except Exception:
-                        pass
-                else:
-                    # URL hors allowed_sites : détecter les liens CDN directs
-                    is_direct_m3u8 = bool(re.search(r'\.m3u8(\?|$)', url_to_test, re.IGNORECASE))
-                    is_direct_mp4  = bool(re.search(r'\.mp4(\?|$)',  url_to_test, re.IGNORECASE))
-                    is_hls_txt     = bool(re.search(r'master\.txt(\?|$)', url_to_test, re.IGNORECASE))
-
-                    if (is_direct_m3u8 or is_direct_mp4) and not best_link:
-                        # Lien CDN m3u8/mp4 avec token signé longue durée → on break immédiatement
-                        best_link = url_to_test
-                        break
-                    elif is_hls_txt and not txt_fallback:
-                        # master.txt HLS : peut expirer vite → on continue à chercher mieux
-                        txt_fallback = url_to_test
-                    elif not raw_fallback:
-                        # Dernier recours : URL brute (sibnet, embed non supporté, etc.)
-                        raw_fallback = url_to_test
-
-            # Priorité : m3u8/mp4 résolu > CDN .txt fallback > embed > raw
-            final_url = best_link or txt_fallback or fallback_link or raw_fallback
+                        pass  # Timeout ou erreur de connexion : on considère le lien mort et on passe au suivant
+                
+                # Fallback sur allowed_sites
+                elif any(site in url_lower for site in allowed_sites):
+                    if not fallback_link:
+                        fallback_link = url_to_test
+                
+                # Dernier Recours on renvoie le Lien direct sans lecteur
+                elif (re.search(r'\.m3u8(\?|$)', url_lower) or re.search(r'\.mp4(\?|$)', url_lower)):
+                    if not raw_link:
+                         raw_link = url_to_test
+            
+            final_url = best_link or fallback_link or raw_link
+            
             if final_url:
                 good_link.append({
                     "episode": episode,
