@@ -109,33 +109,29 @@ def resolve_sendvid(url):
         pass
     return None
 
-def resolve_sibnet(url):
-    """
-    Sibnet resolver. Extracts direct mp4 stream link from video.sibnet.ru shell page.
-    Note: sibnet peut être bloqué selon la région. yt-dlp a un extracteur natif pour sibnet.
-    """
+def resolve_sibnet(scraper, url):
+    """ Extrait l'URL MP4 directe d'une page ou iframe Sibnet. """
     try:
-        r = scraper.get(url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, timeout=5)
-        if r.status_code not in (200, 206):
+        # Extraire l'ID de la vidéo
+        match_id = re.search(r'(?:videoid=|\/video)(\d+)', url)
+        if not match_id:
             return None
-        match = re.search(r'player\.src\(\[\s*\{\s*src:\s*["\'](/v/[^"\']+)["\']', r.text)
-        if not match:
-            match = re.search(r'["\'](/v/[^"\']+\.mp4[^"\']*)["\']', r.text)
-        if match:
-            v_url = "https://video.sibnet.ru" + match.group(1).strip()
-            # Follow 302 redirect with Referer to obtain final direct CDN video link
-            r_302 = scraper.get(v_url, headers={**HEADERS, "Referer": "https://video.sibnet.ru/"}, allow_redirects=False, timeout=5)
-            loc = r_302.headers.get("Location")
-            if loc:
-                if loc.startswith("//"):
-                    cdn_url = "https:" + loc
-                elif loc.startswith("/"):
-                    cdn_url = "https://video.sibnet.ru" + loc
-                else:
-                    cdn_url = loc
-                return {"url": cdn_url, "type": "mp4"}
-            return {"url": v_url, "type": "mp4"}
-    except:
+        
+        video_id = match_id.group(1)
+        embed_url = f"https://video.sibnet.ru/shell.php?videoid={video_id}"
+        
+        headers = {
+            "Referer": "https://video.sibnet.ru/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        
+        res = scraper.get(embed_url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            # Sibnet stocke le chemin mp4 dans le JS sous la forme : /v/xxxxxx.mp4 ou /upload/xxxxxx.mp4
+            mp4_match = re.search(r'"(/\w+/\d+\.mp4)"', res.text) or re.search(r'\'(/\w+/\d+\.mp4)\'', res.text)
+            if mp4_match:
+                return f"https://video.sibnet.ru{mp4_match.group(1)}"
+    except Exception:
         pass
     return None
 

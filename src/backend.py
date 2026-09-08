@@ -7,10 +7,12 @@ try :
     from .utils.resolvers import resolve_video_url
     from .utils.config import Config
     from .utils.utils import Utils
+    from .utils.resolvers import resolve_sibnet
 except ImportError:
     from src.utils.resolvers import resolve_video_url
     from src.utils.config import Config
     from src.utils.utils import Utils
+    from src.utils.resolvers import resolve_sibnet
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, "data", "json")
@@ -306,7 +308,6 @@ class Cardinal:
             version = "vostfr"
 
         good_link = []
-        # Liste étendue des hébergeurs vidéo supportés
         allowed_sites = [
             "sibnet.ru", "video.sibnet.ru",
             "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
@@ -370,42 +371,58 @@ class Cardinal:
 
         nombre_episodes = max(len(all_eps[k]) for k in lecteurs)
 
-        # Parcours épisode par épisode en testant tous les lecteurs disponibles
+        def is_alive(test_link):
+            try:
+                r = scraper.get(test_link, stream=True, timeout=4)
+                return (r.status_code < 400) or (r.status_code == 403)
+            except Exception:
+                return False
+
+        # Parcours épisode par épisode
         for episode in range(nombre_episodes):
             best_link = None
             fallback_link = None
             raw_link = None
-            
+            dead_fallback = None  # Lien de secours si tout le reste échoue
+
             for lecteur in lecteurs:
                 eps_list = all_eps[lecteur]
                 if episode >= len(eps_list):
                     continue
 
-                url_to_test = eps_list[episode]
+                url_to_test = eps_list[episode].strip(" \t\n\r\xa0")
+                if not url_to_test:
+                    continue
+
                 url_lower = url_to_test.lower()
-                
-                # vk et sibnet étant ceux qui semble les plus sur on une priorité plus elever que le reste
-                if "vk.com" in url_lower or "sibnet.ru" in url_lower:
-                    try:
-                        check = scraper.get(url_to_test, stream=True, timeout=3)
-                        if check.status_code < 400:
-                            best_link = url_to_test
-                            break  # Le lien prioritaire est en pingable, on arrête de chercher
-                    except Exception:
-                        pass  # Timeout ou erreur de connexion : on considère le lien mort et on passe au suivant
-                
-                # Fallback sur allowed_sites
+
+                if not dead_fallback:
+                    dead_fallback = url_to_test
+
+                # Traitement Sibnet Extraction MP4 directe
+                if "sibnet.ru" in url_lower:
+                    direct_mp4 = resolve_sibnet(scraper, url_to_test)
+                    if direct_mp4:
+                        best_link = direct_mp4
+                        break
+
+                elif "vk.com" in url_lower:
+                    if is_alive(url_to_test):
+                        best_link = url_to_test
+                        break
+
+                # fallback sur allowed_sites
                 elif any(site in url_lower for site in allowed_sites):
-                    if not fallback_link:
+                    if not fallback_link and is_alive(url_to_test):
                         fallback_link = url_to_test
-                
-                # Dernier Recours on renvoie le Lien direct sans lecteur
-                elif (re.search(r'\.m3u8(\?|$)', url_lower) or re.search(r'\.mp4(\?|$)', url_lower)):
-                    if not raw_link:
-                         raw_link = url_to_test
-            
-            final_url = best_link or fallback_link or raw_link
-            
+
+                # En dernier recours on fait le format direct
+                elif re.search(r'\.(?:m3u8|mp4)(\?|$)', url_lower):
+                    if not raw_link and is_alive(url_to_test):
+                        raw_link = url_to_test
+
+            final_url = best_link or fallback_link or raw_link or dead_fallback
+
             if final_url:
                 good_link.append({
                     "episode": episode,
