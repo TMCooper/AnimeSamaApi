@@ -292,8 +292,8 @@ class Cardinal:
             version = "vostfr"
 
         good_link = []
-        # Liste des hébergeurs autorisés et fiables (Sibnet exclu pour éviter les flux géobloqués)
         allowed_sites = [
+            "video.sibnet.ru", "sibnet.ru",
             "ansembed.net", "ansembed.com",
             "smoothpre.com", "vidhide.com", "vidhidepro.com", "streamwish.com", "streamwish.to",
             "vidmoly.to", "vidmoly.net", "vidmoly.me",

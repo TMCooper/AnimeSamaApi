@@ -87,7 +87,7 @@ class Utils:
         return None
 
 
-    def transform_chapters(data: bytes, title: str) -> dict:
+    def transform_chapters(data, title: str) -> dict:
         chapters = json.loads(data.decode("utf-8"))
 
         # Structure de base
