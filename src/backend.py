@@ -352,7 +352,6 @@ class Cardinal:
         if not all_eps:
             return []
 
-        # 1. Pré-tri : on filtre les lecteurs pour ne garder que ceux dans allowed_sites ou flux directs
         valid_lecteurs = []
         for lecteur, eps_list in all_eps.items():
             if not eps_list:
@@ -369,10 +368,11 @@ class Cardinal:
         if not valid_lecteurs:
             valid_lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=get_lecteur_idx)
 
-        # Tri intelligent des lecteurs par priorité (ansembed & direct mp4 en priorité car sans restriction Referer)
         def lecteur_priority(l_name):
             urls = all_eps.get(l_name, [])
             first_url = urls[0].lower() if urls else ""
+            if any(s in first_url for s in ["sibnet.ru"]):
+                return 0
             if "ansembed" in first_url or first_url.endswith((".mp4", ".m3u8")):
                 return 1
             if any(s in first_url for s in ["smoothpre", "vidhide", "streamwish", "vidmoly"]):
@@ -428,6 +428,8 @@ class Cardinal:
                 if not url_to_test:
                     continue
 
+                is_sibnet = "sibnet.ru" in url_to_test.lower()
+
                 # Tentative de résolution directe en .m3u8 ou .mp4
                 try:
                     resolved = resolve_video_url(url_to_test)
@@ -448,13 +450,9 @@ class Cardinal:
                             best_link = resolved_url
                             break
 
-            if not best_link:
-                for lecteur, eps_list in all_eps.items():
-                    if episode < len(eps_list):
-                        sib_url = eps_list[episode].strip(" \t\n\r\xa0")
-                        if "sibnet.ru" in sib_url.lower():
-                            best_link = sib_url
-                            break
+                if is_sibnet and not best_link:
+                    best_link = url_to_test
+                    break
 
             if best_link:
                 good_link.append({
