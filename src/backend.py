@@ -1,5 +1,6 @@
 import requests
 import json, os, re, cloudscraper, requests, unicodedata
+from urllib.parse import urlparse
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
@@ -20,22 +21,9 @@ PATH_ANIME = os.path.join(PATH_DIR, "AnimeInfo.json")
 BASE_URL = Utils.findLink()
 
 headers = {
-    "Accept": "*/*",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6,de;q=0.5,zh-CN;q=0.4,zh;q=0.3,ru;q=0.2,es;q=0.1,ko;q=0.1,vi;q=0.1,pl;q=0.1",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Host": "bck-1326-ant.vmwesa.online",
-    "Origin": "https://vidmoly.net",
-    "Pragma": "no-cache",
-    "Referer": "https://vidmoly.net/",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "cross-site",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
-    "sec-ch-ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Opera GX";v="122"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 class Cardinal:
@@ -127,7 +115,7 @@ class Cardinal:
                                 break  # Un seul suffit pour déclencher l'actualisation complète
                     
                     if needs_refresh:
-                        requests.get(f"http://{Config.IP}:{Config.PORT}/api/getAllAnime?r=True")
+                        Cardinal.getAllAnime(reset="True")
                 
                 return anime_data
         else:
@@ -169,13 +157,9 @@ class Cardinal:
         text = re.sub(r'\s+', ' ', text).strip()
         return text
             
-    def serchAnime(search, limit):  # Ajouter de quoi afficher sur la liste finale les titres alternatifs s'il y en a
-        try:
-            # animes_data = requests.get("http://127.0.0.1:5000/api/loadBaseAnimeData").json()
-            scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-            animes_data = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/loadBaseAnimeData").json()
-        except cloudscraper.exceptions.RequestException as e:
-            print(f"Erreur lors de la récupération des animes: {e}")
+    def serchAnime(search, limit):  # Recherche les animes par fuzzy matching
+        animes_data = Cardinal.loadBaseAnimeData()
+        if not isinstance(animes_data, list):
             return []
 
         cleaned_search = Cardinal.clean_string(search)  # Utilise directement Cardinal.clean_string
@@ -308,15 +292,17 @@ class Cardinal:
             version = "vostfr"
 
         good_link = []
+        # Liste des hébergeurs autorisés et fiables (Sibnet exclu pour éviter les flux géobloqués)
         allowed_sites = [
-            "sibnet.ru", "video.sibnet.ru",
-            "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
             "ansembed.net", "ansembed.com",
+            "smoothpre.com", "vidhide.com", "vidhidepro.com", "streamwish.com", "streamwish.to",
             "vidmoly.to", "vidmoly.net", "vidmoly.me",
-            "smoothpre.com", "vidhide.com", "vidhidepro.com",
-            "streamwish.com", "streamwish.to",
-            "sendvid.com", "oneupload.to", "oneupload.net",
-            "filemoon.sx", "filemoon.to", "vidoza.net"
+            "sendvid.com",
+            "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
+            "oneupload.to", "oneupload.net",
+            "filemoon.sx", "filemoon.to", "vidoza.net",
+            "vk.com",
+            "anime-sama.fr", "anime-sama.me", "anime-sama.to", "anime-sama.si"
         ]
         
         reponse = Cardinal.getSpecificAnime(nom, saison, version)
@@ -355,7 +341,8 @@ class Cardinal:
 
         jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
         js_text = scraper.get(jsfile).text
-        matches = re.findall(r"var\s+(eps\d+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
+        # Supporte eps1, eps2... ainsi que epsAS ou autres variantes de lecteurs
+        matches = re.findall(r"var\s+(eps\w+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
         all_eps = {
             name: re.findall(r"'(https?://[^']+)'", content)
@@ -365,27 +352,74 @@ class Cardinal:
         if not all_eps:
             return []
 
-        lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=lambda x: int(x.replace("eps", "") or 0))
-        if not lecteurs:
-            return []
+        # 1. Pré-tri : on filtre les lecteurs pour ne garder que ceux dans allowed_sites ou flux directs
+        valid_lecteurs = []
+        for lecteur, eps_list in all_eps.items():
+            if not eps_list:
+                continue
+            first_url = eps_list[0].lower()
+            if any(site in first_url for site in allowed_sites) or first_url.endswith((".mp4", ".m3u8")):
+                valid_lecteurs.append(lecteur)
 
-        nombre_episodes = max(len(all_eps[k]) for k in lecteurs)
+        def get_lecteur_idx(k):
+            num = re.sub(r'[^0-9]', '', k)
+            return int(num) if num else 99
 
-        def is_alive(test_link):
-            try:
-                r = scraper.get(test_link, stream=True, timeout=4)
-                return (r.status_code < 400) or (r.status_code == 403)
-            except Exception:
+        # Si aucun lecteur n'est dans allowed_sites, fallback sur tous les lecteurs disponibles
+        if not valid_lecteurs:
+            valid_lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=get_lecteur_idx)
+
+        # Tri intelligent des lecteurs par priorité (ansembed & direct mp4 en priorité car sans restriction Referer)
+        def lecteur_priority(l_name):
+            urls = all_eps.get(l_name, [])
+            first_url = urls[0].lower() if urls else ""
+            if "ansembed" in first_url or first_url.endswith((".mp4", ".m3u8")):
+                return 1
+            if any(s in first_url for s in ["smoothpre", "vidhide", "streamwish", "vidmoly"]):
+                return 2
+            if any(s in first_url for s in ["sendvid", "embed4me", "lpayer"]):
+                return 3
+            if any(s in first_url for s in allowed_sites):
+                return 4
+            return 5
+
+        valid_lecteurs.sort(key=lambda l: (lecteur_priority(l), get_lecteur_idx(l)))
+
+        nombre_episodes = max(len(v) for v in all_eps.values()) if all_eps else 0
+
+        # Test de vivacité optimisé pour yt-dlp (vérifie que le flux est téléchargeable sans header spécifique)
+        def is_stream_playable(test_link):
+            if not test_link:
                 return False
+            # Test direct sans Referer spécifique (mode standard de yt-dlp)
+            standard_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "Accept": "*/*"
+            }
+            try:
+                r = scraper.get(test_link, headers=standard_headers, timeout=3, stream=True)
+                if r.status_code in (200, 206):
+                    return True
+            except Exception:
+                pass
 
-        # Parcours épisode par épisode
+            # Si échec, tester avec Referer du domaine
+            parsed = urlparse(test_link)
+            domain = parsed.netloc.lower()
+            try:
+                r = scraper.get(test_link, headers={**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"}, timeout=3, stream=True)
+                if r.status_code in (200, 206):
+                    return True
+            except Exception:
+                pass
+
+            return False
+
+        # Résolution épisode par épisode
         for episode in range(nombre_episodes):
             best_link = None
-            fallback_link = None
-            raw_link = None
-            dead_fallback = None  # Lien de secours si tout le reste échoue
 
-            for lecteur in lecteurs:
+            for lecteur in valid_lecteurs:
                 eps_list = all_eps[lecteur]
                 if episode >= len(eps_list):
                     continue
@@ -394,39 +428,38 @@ class Cardinal:
                 if not url_to_test:
                     continue
 
-                url_lower = url_to_test.lower()
+                # Tentative de résolution directe en .m3u8 ou .mp4
+                try:
+                    resolved = resolve_video_url(url_to_test)
+                except Exception:
+                    resolved = None
 
-                if not dead_fallback:
-                    dead_fallback = url_to_test
+                if resolved and isinstance(resolved, dict):
+                    resolved_url = resolved.get("url")
+                    resolved_type = resolved.get("type")
 
-                # Traitement Sibnet Extraction MP4 directe
-                if "sibnet.ru" in url_lower:
-                    direct_mp4 = resolve_sibnet(scraper, url_to_test)
-                    if direct_mp4:
-                        best_link = direct_mp4
-                        break
+                    if resolved_type in ("m3u8", "mp4") and resolved_url:
+                        if is_stream_playable(resolved_url):
+                            best_link = resolved_url
+                            break
 
-                elif "vk.com" in url_lower:
-                    if is_alive(url_to_test):
-                        best_link = url_to_test
-                        break
+                    elif resolved_type == "embed" and resolved_url:
+                        if is_stream_playable(resolved_url):
+                            best_link = resolved_url
+                            break
 
-                # fallback sur allowed_sites
-                elif any(site in url_lower for site in allowed_sites):
-                    if not fallback_link and is_alive(url_to_test):
-                        fallback_link = url_to_test
+            if not best_link:
+                for lecteur, eps_list in all_eps.items():
+                    if episode < len(eps_list):
+                        sib_url = eps_list[episode].strip(" \t\n\r\xa0")
+                        if "sibnet.ru" in sib_url.lower():
+                            best_link = sib_url
+                            break
 
-                # En dernier recours on fait le format direct
-                elif re.search(r'\.(?:m3u8|mp4)(\?|$)', url_lower):
-                    if not raw_link and is_alive(url_to_test):
-                        raw_link = url_to_test
-
-            final_url = best_link or fallback_link or raw_link or dead_fallback
-
-            if final_url:
+            if best_link:
                 good_link.append({
                     "episode": episode,
-                    "url": final_url
+                    "url": best_link
                 })
 
         return good_link

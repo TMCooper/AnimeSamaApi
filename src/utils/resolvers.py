@@ -80,7 +80,12 @@ def resolve_smoothpre(url):
                 if m:
                     target_url = m.group(1).replace('\\', '')
                     if target_url.startswith("/"): target_url = base_url + target_url
-                    return {"url": target_url, "type": "m3u8"}
+                    try:
+                        chk = scraper.get(target_url, headers={**HEADERS, "Referer": base_url + "/"}, timeout=3, stream=True)
+                        if chk.status_code in (200, 206):
+                            return {"url": target_url, "type": "m3u8"}
+                    except:
+                        pass
     except:
         pass
     return None
@@ -104,15 +109,20 @@ def resolve_sendvid(url):
         if match:
             video_url = match.group(1)
             if video_url.startswith("//"): video_url = "https:" + video_url
-            return {"url": video_url, "type": "mp4"}
+            try:
+                chk = scraper.get(video_url, headers={**HEADERS, "Referer": "https://sendvid.com/"}, timeout=3, stream=True)
+                if chk.status_code in (200, 206):
+                    return {"url": video_url, "type": "mp4"}
+            except:
+                pass
     except:
         pass
     return None
 
-def resolve_sibnet(scraper, url):
+def resolve_sibnet(url, scraper_instance=None):
     """ Extrait l'URL MP4 directe d'une page ou iframe Sibnet. """
+    s = scraper_instance or scraper
     try:
-        # Extraire l'ID de la vidéo
         match_id = re.search(r'(?:videoid=|\/video)(\d+)', url)
         if not match_id:
             return None
@@ -125,12 +135,17 @@ def resolve_sibnet(scraper, url):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
         
-        res = scraper.get(embed_url, headers=headers, timeout=5)
+        res = s.get(embed_url, headers=headers, timeout=5)
         if res.status_code == 200:
-            # Sibnet stocke le chemin mp4 dans le JS sous la forme : /v/xxxxxx.mp4 ou /upload/xxxxxx.mp4
             mp4_match = re.search(r'"(/\w+/\d+\.mp4)"', res.text) or re.search(r'\'(/\w+/\d+\.mp4)\'', res.text)
             if mp4_match:
-                return f"https://video.sibnet.ru{mp4_match.group(1)}"
+                direct_mp4 = f"https://video.sibnet.ru{mp4_match.group(1)}"
+                try:
+                    chk = s.get(direct_mp4, headers=headers, timeout=3, stream=True)
+                    if chk.status_code in (200, 206):
+                        return {"url": direct_mp4, "type": "mp4"}
+                except:
+                    pass
     except Exception:
         pass
     return None
@@ -147,7 +162,13 @@ def resolve_ansembed(url):
         if not match:
             match = re.search(r'["\'](https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
         if match:
-            return {"url": match.group(1).strip(), "type": "m3u8"}
+            m3u8_url = match.group(1).strip()
+            try:
+                chk = scraper.get(m3u8_url, headers={**HEADERS, "Referer": url}, timeout=3, stream=True)
+                if chk.status_code in (200, 206):
+                    return {"url": m3u8_url, "type": "m3u8"}
+            except:
+                pass
     except:
         pass
     return None
@@ -199,6 +220,13 @@ def resolve_video_url(url):
     """
     Resolves a video embed URL to a direct link (mp4/m3u8) or returns original if failed.
     """
+    if not url:
+        return None
+    if re.search(r'\.m3u8(\?|$)', url, re.IGNORECASE):
+        return {"url": url, "type": "m3u8"}
+    if re.search(r'\.mp4(\?|$)', url, re.IGNORECASE):
+        return {"url": url, "type": "mp4"}
+
     parsed = urlparse(url)
     domain = parsed.netloc.lower().replace("www.", "")
     resolver = RESOLVER_MAP.get(domain)
