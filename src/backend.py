@@ -451,8 +451,9 @@ class Cardinal:
                             break
 
                 if is_sibnet and not best_link:
-                    best_link = url_to_test
-                    break
+                    if is_stream_playable(url_to_test):
+                        best_link = url_to_test
+                        break
 
             if best_link:
                 good_link.append({
