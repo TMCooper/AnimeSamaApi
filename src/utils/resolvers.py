@@ -1,6 +1,7 @@
 import re
 import cloudscraper # type: ignore
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
+from concurrent.futures import ThreadPoolExecutor
 
 # --- Configuration & Headers ---
 scraper = cloudscraper.create_scraper()
@@ -119,37 +120,6 @@ def resolve_sendvid(url):
         pass
     return None
 
-def resolve_sibnet(url, scraper_instance=None):
-    """ Extrait l'URL MP4 directe d'une page ou iframe Sibnet. """
-    s = scraper_instance or scraper
-    try:
-        match_id = re.search(r'(?:videoid=|\/video)(\d+)', url)
-        if not match_id:
-            return None
-        
-        video_id = match_id.group(1)
-        embed_url = f"https://video.sibnet.ru/shell.php?videoid={video_id}"
-        
-        headers = {
-            "Referer": "https://video.sibnet.ru/",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-        
-        res = s.get(embed_url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            mp4_match = re.search(r'"(/\w+/\d+\.mp4)"', res.text) or re.search(r'\'(/\w+/\d+\.mp4)\'', res.text)
-            if mp4_match:
-                direct_mp4 = f"https://video.sibnet.ru{mp4_match.group(1)}"
-                try:
-                    chk = s.get(direct_mp4, headers=headers, timeout=3, stream=True)
-                    if chk.status_code in (200, 206):
-                        return {"url": direct_mp4, "type": "mp4"}
-                except:
-                    pass
-    except Exception:
-        pass
-    return None
-
 def resolve_ansembed(url):
     """
     Ansembed / Movembed resolver. Extracts m3u8 playlist URL from player page.
@@ -182,7 +152,6 @@ def resolve_embed4me(url):
         r = scraper.get(url, headers={**HEADERS, "Referer": url}, timeout=10)
         if r.status_code not in (200, 206):
             return None
-        # Chercher un lien m3u8 direct dans le HTML/JS
         match = re.search(r'file\s*:\s*["\']( https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
         if not match:
             match = re.search(r'["\']( https?://[^"\']+\.m3u8[^"\']*)["\']', r.text)
@@ -190,16 +159,167 @@ def resolve_embed4me(url):
             return {"url": match.group(1).strip(), "type": "m3u8"}
     except:
         pass
-    # Fallback : retourner l'URL embed, yt-dlp tentera de la lire
     return {"url": url, "type": "embed"}
+
+# ============================================================
+#  Stream Health & Integrity Checkers
+# ============================================================
+
+
+def check_m3u8_health(m3u8_url, referer=None, num_samples=10):
+    """
+    Vérifie l'intégrité complète d'un stream HLS m3u8 :
+    - Présence de #EXTM3U et sous-playlists (master playlist)
+    - Présence du tag de fin de vidéo (#EXT-X-ENDLIST)
+    - Test de disponibilité en parallèle sur un échantillon de segments répartis sur tout le fichier
+    Retourne (error_count, is_complete). error_count == 0 => stream 100% complet et fonctionnel.
+    """
+    req_headers = {**HEADERS}
+    if referer:
+        req_headers['Referer'] = referer
+    else:
+        p = urlparse(m3u8_url)
+        req_headers['Referer'] = f"{p.scheme}://{p.netloc}/"
+
+    try:
+        r = scraper.get(m3u8_url, headers=req_headers, timeout=4)
+        if r.status_code != 200 or not r.text or "html" in r.headers.get("Content-Type", "").lower():
+            return (999, False)
+
+        text = r.text
+        if not text.startswith("#EXTM3U") and "#EXTM3U" not in text[:50]:
+            return (999, False)
+
+        # Si master playlist avec variantes de résolutions
+        if "#EXT-X-STREAM-INF" in text:
+            sub_matches = re.findall(r'^(?!#)(.+)$', text, re.MULTILINE)
+            if not sub_matches:
+                return (999, False)
+            sub_url = sub_matches[0].strip()
+            full_sub_url = urljoin(m3u8_url, sub_url)
+            return check_m3u8_health(full_sub_url, referer=req_headers['Referer'], num_samples=num_samples)
+
+        has_endlist = "#EXT-X-ENDLIST" in text
+        segments = [
+            urljoin(m3u8_url, line.strip())
+            for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        if not segments:
+            return (999, False)
+
+        total_segs = len(segments)
+        step = max(1, (total_segs - 1) // (num_samples - 1)) if total_segs > num_samples else 1
+        sample_indices = sorted(list({min(total_segs - 1, i * step) for i in range(num_samples)}))
+
+        def test_segment(idx):
+            seg_url = segments[idx]
+            try:
+                res = scraper.get(seg_url, headers={**req_headers, 'Range': 'bytes=0-1024'}, timeout=2.5, stream=True)
+                if res.status_code in (200, 206) and "html" not in res.headers.get("Content-Type", "").lower():
+                    return True
+            except Exception:
+                pass
+            return False
+
+        with ThreadPoolExecutor(max_workers=min(len(sample_indices), 8)) as pool:
+            results = list(pool.map(test_segment, sample_indices))
+
+        errors = results.count(False)
+        if not has_endlist:
+            errors += 2  # Pénalité si le tag de fin de vidéo manque
+
+        return (errors, errors == 0 and has_endlist)
+    except Exception:
+        return (999, False)
+
+def check_mp4_health(mp4_url, referer=None):
+    """
+    Vérifie l'intégrité d'un flux MP4 direct :
+    - Support des requêtes partielles (Range)
+    - Taille minimale (> 5 Mo)
+    - Accessibilité du début et de la fin du fichier
+    """
+    req_headers = {**HEADERS}
+    if referer:
+        req_headers['Referer'] = referer
+    else:
+        p = urlparse(mp4_url)
+        req_headers['Referer'] = f"{p.scheme}://{p.netloc}/"
+
+    try:
+        res = scraper.get(mp4_url, headers={**req_headers, 'Range': 'bytes=0-1024'}, timeout=3, stream=True)
+        if res.status_code not in (200, 206) or "html" in res.headers.get("Content-Type", "").lower():
+            return (999, False)
+
+        content_range = res.headers.get("Content-Range", "")
+        content_length = res.headers.get("Content-Length", "0")
+        total_size = 0
+
+        if "/" in content_range:
+            try:
+                total_size = int(content_range.split("/")[-1])
+            except ValueError:
+                pass
+        elif content_length:
+            try:
+                total_size = int(content_length)
+            except ValueError:
+                pass
+
+        if total_size > 0 and total_size < 5 * 1024 * 1024:
+            return (5, False)
+
+        if total_size > 2048:
+            end_range = f"bytes={total_size - 2048}-{total_size - 1}"
+            res_end = scraper.get(mp4_url, headers={**req_headers, 'Range': end_range}, timeout=3, stream=True)
+            if res_end.status_code not in (200, 206):
+                return (2, False)
+
+        return (0, True)
+    except Exception:
+        return (999, False)
+
+def check_stream_health(resolved_stream):
+    """
+    Évalue la santé et la complétude du stream vidéo résolu.
+    Retourne (error_score, is_complete).
+    error_score == 0 signifie stream 100% complet et fonctionnel sans erreur.
+    Plus le score est bas, meilleur est le flux.
+    """
+    if not resolved_stream or not isinstance(resolved_stream, dict):
+        return (9999, False)
+
+    url = resolved_stream.get("url")
+    stream_type = resolved_stream.get("type")
+
+    if not url:
+        return (9999, False)
+
+    if stream_type == "m3u8" or ".m3u8" in url:
+        return check_m3u8_health(url)
+    elif stream_type == "mp4" or ".mp4" in url:
+        return check_mp4_health(url)
+    elif stream_type in ("embed", "raw"):
+        try:
+            r = scraper.get(url, timeout=3)
+            if r.status_code == 200 and "html" not in r.headers.get("Content-Type", "").lower():
+                return (20, False)
+            elif r.status_code == 200:
+                # Embed HTML de lecteur valide
+                return (30, False)
+        except Exception:
+            pass
+        return (9999, False)
+
+    return (9999, False)
 
 # ============================================================
 #  Dispatcher
 # ============================================================
 
 RESOLVER_MAP = {
-    "video.sibnet.ru": resolve_sibnet,
-    "sibnet.ru": resolve_sibnet,
     "ansembed.net": resolve_ansembed,
     "ansembed.com": resolve_ansembed,
     "lpayer.embed4me.com": resolve_embed4me,
@@ -215,6 +335,7 @@ RESOLVER_MAP = {
     "streamwish.to": resolve_smoothpre,
     "sendvid.com": resolve_sendvid,
 }
+
 
 def resolve_video_url(url):
     """

@@ -1,19 +1,18 @@
-import requests
 import json, os, re, cloudscraper, requests, unicodedata
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
 
 try :
-    from .utils.resolvers import resolve_video_url
+    from .utils.resolvers import resolve_video_url, check_stream_health
     from .utils.config import Config
     from .utils.utils import Utils
-    from .utils.resolvers import resolve_sibnet
 except ImportError:
-    from src.utils.resolvers import resolve_video_url
+    from src.utils.resolvers import resolve_video_url, check_stream_health
     from src.utils.config import Config
     from src.utils.utils import Utils
-    from src.utils.resolvers import resolve_sibnet
+
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 PATH_DIR = os.path.join(PATH, "data", "json")
@@ -339,7 +338,7 @@ class Cardinal:
         js_link = src.split('"')[0].split("'")[0]
 
         jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
-        js_text = scraper.get(jsfile).text
+        js_text = scraper.get(jsfile, headers={**headers, "Referer": link}).text
         # Supporte eps1, eps2... ainsi que epsAS ou autres variantes de lecteurs
         matches = re.findall(r"var\s+(eps\w+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
@@ -370,66 +369,34 @@ class Cardinal:
         def lecteur_priority(l_name):
             urls = all_eps.get(l_name, [])
             first_url = urls[0].lower() if urls else ""
-            if any(s in first_url for s in ["sibnet.ru"]):
-                return 0
             if "ansembed" in first_url or first_url.endswith((".mp4", ".m3u8")):
-                return 1
+                return 0
             if any(s in first_url for s in ["smoothpre", "vidhide", "streamwish", "vidmoly"]):
-                return 2
+                return 1
             if any(s in first_url for s in ["sendvid", "embed4me", "lpayer"]):
-                return 3
+                return 2
             if any(s in first_url for s in allowed_sites):
-                return 4
-            return 5
+                return 3
+            return 4
 
         valid_lecteurs.sort(key=lambda l: (lecteur_priority(l), get_lecteur_idx(l)))
 
         nombre_episodes = max(len(v) for v in all_eps.values()) if all_eps else 0
 
-        # Test de vivacité optimisé pour yt-dlp (vérifie que le flux est téléchargeable sans header spécifique)
-        def is_stream_playable(test_link):
-            if not test_link:
-                return False
-            # Test direct sans Referer spécifique (mode standard de yt-dlp)
-            standard_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                "Accept": "*/*"
-            }
-            try:
-                r = scraper.get(test_link, headers=standard_headers, timeout=3, stream=True)
-                if r.status_code in (200, 206):
-                    return True
-            except Exception:
-                pass
-
-            # Si échec, tester avec Referer du domaine
-            parsed = urlparse(test_link)
-            domain = parsed.netloc.lower()
-            try:
-                r = scraper.get(test_link, headers={**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"}, timeout=3, stream=True)
-                if r.status_code in (200, 206):
-                    return True
-            except Exception:
-                pass
-
-            return False
-
-        # Résolution épisode par épisode
-        for episode in range(nombre_episodes):
+        # Résolution optimisée en parallèle avec test d'intégrité de stream entier
+        def resolve_single_episode(episode):
             best_link = None
+            candidates = []
 
             for lecteur in valid_lecteurs:
-                eps_list = all_eps[lecteur]
+                eps_list = all_eps.get(lecteur, [])
                 if episode >= len(eps_list):
                     continue
 
                 url_to_test = eps_list[episode].strip(" \t\n\r\xa0")
-                if not url_to_test:
+                if not url_to_test or "sibnet.ru" in url_to_test.lower():
                     continue
 
-                is_sibnet = "sibnet.ru" in url_to_test.lower()
-
-                # Tentative de résolution directe en .m3u8 ou .mp4
                 try:
                     resolved = resolve_video_url(url_to_test)
                 except Exception:
@@ -437,29 +404,40 @@ class Cardinal:
 
                 if resolved and isinstance(resolved, dict):
                     resolved_url = resolved.get("url")
-                    resolved_type = resolved.get("type")
+                    if not resolved_url:
+                        continue
 
-                    if resolved_type in ("m3u8", "mp4") and resolved_url:
-                        if is_stream_playable(resolved_url):
-                            best_link = resolved_url
-                            break
+                    # Test de santé et d'intégrité du stream entier (segments m3u8 ou MP4)
+                    errors, is_complete = check_stream_health(resolved)
 
-                    elif resolved_type == "embed" and resolved_url:
-                        if is_stream_playable(resolved_url):
-                            best_link = resolved_url
-                            break
-
-                if is_sibnet and not best_link:
-                    if is_stream_playable(url_to_test):
-                        best_link = url_to_test
+                    # Si stream 100% complet et fonctionnel sans aucune erreur
+                    if errors == 0 and is_complete:
+                        best_link = resolved_url
                         break
 
+                    # Si le flux fonctionne mais présente des erreurs/incomplétudes
+                    if errors < 999:
+                        candidates.append({"errors": errors, "url": resolved_url})
+
+            # Si aucun flux parfait à 0 erreur, choisir celui avec le moins d'erreurs
+            if not best_link and candidates:
+                best_candidate = min(candidates, key=lambda c: c["errors"])
+                best_link = best_candidate["url"]
+
             if best_link:
-                good_link.append({
+                return {
                     "episode": episode,
                     "url": best_link
-                })
+                }
+            return None
 
+        # Exécution de tous les épisodes en parallèle
+        max_workers = min(10, max(1, nombre_episodes))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(resolve_single_episode, range(nombre_episodes)))
+
+        good_link = [r for r in results if r is not None]
+        good_link.sort(key=lambda x: x["episode"])
         return good_link
 
 
