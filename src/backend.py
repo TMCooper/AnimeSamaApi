@@ -367,7 +367,10 @@ class Cardinal:
             if s == saison_norm or (saison_norm in ["oav", "oavs"] and "oav" in s):
                 return reponse[i]
 
-        # Si la saison demandée n'est pas trouvée par nom exact, retourner la première saison par défaut
+        for i, s in enumerate(saisons_normalized):
+            if saison_norm in s or s in saison_norm:
+                return reponse[i]
+
         if reponse and len(reponse) > 0:
             return reponse[0]
 
@@ -380,19 +383,6 @@ class Cardinal:
         if not version:
             version = "vostfr"
 
-        good_link = []
-        allowed_sites = [
-            "ansembed.net", "ansembed.com",
-            "smoothpre.com", "vidhide.com", "vidhidepro.com", "streamwish.com", "streamwish.to",
-            "vidmoly.to", "vidmoly.net", "vidmoly.me",
-            "sendvid.com",
-            "embed4me.com", "lpayer.embed4me.com", "player.embed4me.com",
-            "oneupload.to", "oneupload.net",
-            "filemoon.sx", "filemoon.to", "vidoza.net",
-            "vk.com",
-            "anime-sama.fr", "anime-sama.me", "anime-sama.to", "anime-sama.si"
-        ]
-        
         reponse = Cardinal.getSpecificAnime(nom, saison, version)
         if not reponse or not isinstance(reponse, dict) or "url" not in reponse:
             return []
@@ -440,89 +430,89 @@ class Cardinal:
         if not all_eps:
             return []
 
-        valid_lecteurs = []
-        for lecteur, eps_list in all_eps.items():
-            if not eps_list:
-                continue
-            first_url = eps_list[0].lower()
-            if any(site in first_url for site in allowed_sites) or first_url.endswith((".mp4", ".m3u8")):
-                valid_lecteurs.append(lecteur)
-
         def get_lecteur_idx(k):
             num = re.sub(r'[^0-9]', '', k)
             return int(num) if num else 99
 
-        # Si aucun lecteur n'est dans allowed_sites, fallback sur tous les lecteurs disponibles
-        if not valid_lecteurs:
-            valid_lecteurs = sorted([k for k in all_eps.keys() if k.startswith("eps")], key=get_lecteur_idx)
-
         def lecteur_priority(l_name):
             urls = all_eps.get(l_name, [])
             first_url = urls[0].lower() if urls else ""
-            if "ansembed" in first_url or first_url.endswith((".mp4", ".m3u8")):
+            if "ansembed" in first_url:
                 return 0
             if any(s in first_url for s in ["smoothpre", "vidhide", "streamwish", "vidmoly"]):
                 return 1
-            if any(s in first_url for s in ["sendvid", "embed4me", "lpayer"]):
+            if "sendvid" in first_url:
                 return 2
-            if any(s in first_url for s in allowed_sites):
+            if any(s in first_url for s in ["embed4me", "lpayer", "player"]):
                 return 3
             return 4
 
-        valid_lecteurs.sort(key=lambda l: (lecteur_priority(l), get_lecteur_idx(l)))
+        # Trie les lecteurs par ordre de priorité de qualité/vitesse puis par numéro (eps1, eps2...)
+        valid_lecteurs = sorted(
+            [k for k, eps in all_eps.items() if eps],
+            key=lambda l: (lecteur_priority(l), get_lecteur_idx(l))
+        )
+        nombre_episodes = max(len(v) for v in all_eps.values())
 
-        nombre_episodes = max(len(v) for v in all_eps.values()) if all_eps else 0
-
-        # Résolution optimisée en parallèle avec test d'intégrité de stream entier
-        def resolve_single_episode(episode):
-            best_link = None
-            candidates = []
+        def resolve_single_episode(ep_idx):
+            session = requests.Session()
+            fallback_url = None
+            best_candidate = None
 
             for lecteur in valid_lecteurs:
                 eps_list = all_eps.get(lecteur, [])
-                if episode >= len(eps_list):
+                if ep_idx >= len(eps_list):
                     continue
 
-                url_to_test = eps_list[episode].strip(" \t\n\r\xa0")
+                url_to_test = eps_list[ep_idx].strip(" \t\n\r\xa0")
                 if not url_to_test or "sibnet.ru" in url_to_test.lower():
+                    if url_to_test and not fallback_url:
+                        fallback_url = url_to_test
                     continue
+
+                if not fallback_url:
+                    fallback_url = url_to_test
 
                 try:
-                    resolved = resolve_video_url(url_to_test)
+                    resolved = resolve_video_url(url_to_test, session=session)
                 except Exception:
                     resolved = None
 
                 if resolved and isinstance(resolved, dict):
                     resolved_url = resolved.get("url")
-                    if not resolved_url:
-                        continue
+                    if resolved_url and resolved.get("type") in ("m3u8", "mp4"):
+                        # Vérification de santé du stream
+                        error_score, is_healthy = check_stream_health(resolved, session=session)
+                        
+                        # 0 = stream vérifié actif et sain
+                        if error_score == 0:
+                            return {
+                                "episode": ep_idx + 1,
+                                "url": resolved_url
+                            }
+                        
+                        # Flux potentiellement valide mais lent à répondre (timeout/connexion lente)
+                        elif is_healthy and error_score < 999:
+                            if not best_candidate:
+                                best_candidate = resolved_url
 
-                    # Test de santé et d'intégrité du stream entier (segments m3u8 ou MP4)
-                    errors, is_complete = check_stream_health(resolved)
-
-                    # Si stream 100% complet et fonctionnel sans aucune erreur
-                    if errors == 0 and is_complete:
-                        best_link = resolved_url
-                        break
-
-                    # Si le flux fonctionne mais présente des erreurs/incomplétudes
-                    if errors < 999:
-                        candidates.append({"errors": errors, "url": resolved_url})
-
-            # Si aucun flux parfait à 0 erreur, choisir celui avec le moins d'erreurs
-            if not best_link and candidates:
-                best_candidate = min(candidates, key=lambda c: c["errors"])
-                best_link = best_candidate["url"]
-
-            if best_link:
+            # Si aucun lecteur n'a pu être validé instantanément, utiliser le meilleur candidat
+            if best_candidate:
                 return {
-                    "episode": episode,
-                    "url": best_link
+                    "episode": ep_idx + 1,
+                    "url": best_candidate
+                }
+
+            # En dernier recours pour ne jamais rejeter l'épisode, retourner l'embed
+            if fallback_url:
+                return {
+                    "episode": ep_idx + 1,
+                    "url": fallback_url
                 }
             return None
 
-        # Exécution de tous les épisodes en parallèle
-        max_workers = min(10, max(1, nombre_episodes))
+        # Exécution en parallèle optimisée
+        max_workers = min(8, max(1, nombre_episodes))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             results = list(executor.map(resolve_single_episode, range(nombre_episodes)))
 
