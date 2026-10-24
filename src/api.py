@@ -30,7 +30,7 @@ class Yui:
             'PORT': Config.PORT
         })
 
-    @app.route('/status', methods=["GET"])
+    @app.route('/api/status', methods=["GET"])
     def status():
         return jsonify({'API Status' : 'Online'})
         
