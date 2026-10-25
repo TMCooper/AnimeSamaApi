@@ -371,6 +371,9 @@ http://127.0.0.1:5000/api/getScanHashmap?n=Frieren
 
 Génère la liste complète des URL d'images pour un chapitre spécifique ou pour l'ensemble de la œuvre.
 
+> [!WARNING]
+> Certain Chapitre possèdes des nom spécifique exemple Frieren chapitre 110.1 et sont reconue comme le chapitre 111 se qui crée une décalage mais le chapitre est bien trouvée le chapitre max n'est donc pas toujours exact en fonction de se même décalage 
+
 **Paramètres** :
 
 - `n` (obligatoire) : Nom du manga
