@@ -325,6 +325,19 @@ class Cardinal:
         reponse = scraper.get(base_url)
         soup = BeautifulSoup(reponse.text, 'html.parser')
 
+        # Récupération du synopsis
+        synopsis = ""
+        synopsis_tag = (
+            soup.find("p", class_="ak-slide-synopsis")
+            or soup.find(id="synopsisText")
+            or soup.select_one(".oe-synopsis p")
+            or soup.find(class_="oe-synopsis")
+        )
+        if synopsis_tag:
+            for extra in synopsis_tag.find_all(["button", "a"]):
+                extra.decompose()
+            synopsis = re.sub(r'\s+', ' ', synopsis_tag.get_text(separator=' ', strip=True)).strip()
+
         scripts = soup.find_all("script")
         pattern = re.compile(r'panneau(?:Anime|Film|Scan|Visual)\s*\(\s*(["\'])(.*?)\1\s*,\s*(["\'])(.*?)\3\s*\)')
 
@@ -339,6 +352,7 @@ class Cardinal:
                             "base_url": base_url,
                             "title": title,
                             "cover": cover,
+                            "synopsis": synopsis,
                             "Saison": nom,
                             "url": saison_url
                         })

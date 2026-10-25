@@ -249,12 +249,16 @@ http://127.0.0.1:5000/api/getInfoAnime?q=Demon Slayer
   {
     "base_url": "https://anime-sama.org/catalogue/demon-slayer/",
     "title": "Demon Slayer",
+    "cover": "https://raw.githubusercontent.com/Anime-Sama/IMG/img/contenu/demon-slayer.jpg",
+    "synopsis": "Depuis les temps anciens, il existe des rumeurs concernant des démons mangeurs d'hommes qui se cachent dans les bois...",
     "Saison": "Saison 1",
     "url": "https://anime-sama.org/catalogue/demon-slayer/saison1/"
   },
   {
     "base_url": "https://anime-sama.org/catalogue/demon-slayer/",
     "title": "Demon Slayer",
+    "cover": "https://raw.githubusercontent.com/Anime-Sama/IMG/img/contenu/demon-slayer.jpg",
+    "synopsis": "Depuis les temps anciens, il existe des rumeurs concernant des démons mangeurs d'hommes qui se cachent dans les bois...",
     "Saison": "Saison 2",
     "url": "https://anime-sama.org/catalogue/demon-slayer/saison2/"
   }
@@ -514,6 +518,7 @@ Pour toute question ou bug, vérifiez :
 2. La disponibilité du site source
 
 # Patch
+- Ajout de la récupération du synopsis de l'anime sur la route `/api/getInfoAnime` (et `/api/getSpecificAnime`).
 - Ajout de la gestion et de l'extraction automatique des liens de scans/mangas (/api/getScanHashmap et /api/getScanLink)
 - Le bug lié à la mise a jour du domaine vers .eu est corriger voir l’[issue #2](../../issues/2).
 - Suppression complète de Playwright.
