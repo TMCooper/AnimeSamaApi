@@ -65,7 +65,7 @@ class Yui:
     
     @app.route('/api/getInfoAnime', methods=["GET"])
     def getInfoAnime():
-        querry = request.args.get("q", "").strip()
+        querry = request.args.get("q", "").strip() or request.args.get("n", "").strip()
         if not querry:
             return jsonify({"error": "Paramètre 'q' manquant"}), 400
                 
@@ -73,7 +73,7 @@ class Yui:
     
     @app.route('/api/getSpecificAnime', methods=["GET"])
     def getSpecificAnime():
-        querry = request.args.get("q", "").strip()
+        querry = request.args.get("q", "").strip() or request.args.get("n", "").strip()
         saison = request.args.get("s", "").strip() # saison1 par défaut
         version = request.args.get("v", "").strip() # version sera en vostfr par défaut
     
@@ -87,7 +87,7 @@ class Yui:
     
     @app.route('/api/getAnimeLink', methods=["GET"])
     def getAnimeLink():
-        nom = request.args.get("n", "").strip()
+        nom = request.args.get("n", "").strip() or request.args.get("q", "").strip()
         saison = request.args.get("s", "").strip() # saison1 par défaut
         version = request.args.get("v", "").strip() # version sera en vostfr par défaut
 
@@ -98,7 +98,7 @@ class Yui:
 
     @app.route('/api/getScanLink', methods=["GET"])
     def getScanLink():
-        nom = request.args.get("n", "").strip()
+        nom = request.args.get("n", "").strip() or request.args.get("q", "").strip()
         chaptitre = request.args.get("c", "").strip() # Chapitre (est un int ex : &c=2) servira a viser un chapitre spécifique par défaut il résouts la totalité des liens disponibles
 
         if not nom:
@@ -108,7 +108,7 @@ class Yui:
 
     @app.route('/api/getScanHashmap', methods=["GET"])
     def getScanHashmap():
-        nom = request.args.get("n", "").strip()
+        nom = request.args.get("n", "").strip() or request.args.get("q", "").strip()
 
         if not nom:
             return jsonify({"error": "Paramètre 'n' manquant"}), 400

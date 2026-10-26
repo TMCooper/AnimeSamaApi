@@ -270,8 +270,9 @@ class Cardinal:
 
         # Cas 1: cq est une sous-chaîne exacte de ct (ex: 'naruto' in 'naruto shippuden')
         if cq in ct:
+            extra_words = max(0, len(t_words) - len(q_words))
             ratio_len = len(cq) / len(ct)
-            return 85.0 + 15.0 * ratio_len
+            return max(60.0, 75.0 + 15.0 * ratio_len - (extra_words * 2.5))
 
         # Cas 2: ct est une sous-chaîne exacte de cq (ex: 'frieren' in 'sousou no frieren')
         if ct in cq and len(ct) >= 3:
@@ -397,10 +398,10 @@ class Cardinal:
                 "score": round(final_score, 1)
             })
 
-        # 2. Si aucun résultat local de haute confiance (>= 88), interroger la recherche native Anime-Sama
+        # 2. Si aucun résultat local de quasi-certitude (>= 98), interroger la recherche native Anime-Sama
         # Anime-Sama effectue une recherche SQL sur l'intégralité de ses titres principaux et alternatifs
         best_score = scored_results[0]["score"] if scored_results else 0.0
-        if best_score < 88.0:
+        if best_score < 98.0:
             try:
                 scraper = cloudscraper.create_scraper()
                 base_url = BASE_URL if BASE_URL else Utils.findLink()
@@ -418,26 +419,47 @@ class Cardinal:
                             path = parsed.path.rstrip('/')
                             link = f"{base_url.rstrip('/')}{path}"
 
-                        if nom and link and link not in seen:
-                            seen.add(link)
+                        if nom and link:
                             norm_title = Cardinal.normalize_title(nom)
-                            local_match = next((a for a in animes_data if a.get("link") == link or a.get("title") == norm_title), None)
-                            if local_match:
-                                scored_results.append({
-                                    "title": local_match.get("title", norm_title),
-                                    "alt_titles": local_match.get("alt_titles", []),
-                                    "lien": local_match.get("link", link),
-                                    "cover": local_match.get("cover", cover),
-                                    "score": 93.0
-                                })
+                            cleaned_nom = Cardinal.clean_string(norm_title)
+                            
+                            # Calcul du score pour les résultats retournés par la recherche SQL Anime-Sama
+                            if cleaned_nom == cleaned_search:
+                                remote_score = 98.0
+                            elif cleaned_search in cleaned_nom or cleaned_nom in cleaned_search:
+                                remote_score = 96.0
                             else:
-                                scored_results.append({
-                                    "title": norm_title,
-                                    "alt_titles": [],
-                                    "lien": link,
-                                    "cover": cover,
-                                    "score": 93.0
-                                })
+                                remote_score = 95.0
+
+                            # Légère pénalité si c'est un spin-off alors que la requête cherchait la série principale
+                            if any(w in cleaned_nom for w in ['junior', 'highschool', 'high school', 'chibi', 'spinoff', 'spin off', 'special', 'recap']):
+                                if not any(w in cleaned_search for w in ['junior', 'highschool', 'high school', 'chibi', 'spinoff', 'spin off']):
+                                    remote_score -= 3.0
+
+                            local_match = next((a for a in animes_data if a.get("link") == link or a.get("title") == norm_title), None)
+                            existing_entry = next((item for item in scored_results if item.get("lien") == link), None)
+                            
+                            if existing_entry:
+                                if remote_score > existing_entry["score"]:
+                                    existing_entry["score"] = remote_score
+                            else:
+                                seen.add(link)
+                                if local_match:
+                                    scored_results.append({
+                                        "title": local_match.get("title", norm_title),
+                                        "alt_titles": local_match.get("alt_titles", []),
+                                        "lien": local_match.get("link", link),
+                                        "cover": local_match.get("cover", cover),
+                                        "score": remote_score
+                                    })
+                                else:
+                                    scored_results.append({
+                                        "title": norm_title,
+                                        "alt_titles": [],
+                                        "lien": link,
+                                        "cover": cover,
+                                        "score": remote_score
+                                    })
             except Exception:
                 pass
 
@@ -508,37 +530,133 @@ class Cardinal:
 
         return animes
     
+    @staticmethod
+    def normalize_season_text(text):
+        if not text:
+            return ""
+        text = unicodedata.normalize("NFKD", str(text))
+        text = "".join(c for c in text if not unicodedata.combining(c))
+        text = text.lower().strip()
+        # Corriger les fautes de frappe courantes et termes anglais
+        text = re.sub(r'\bsaions?\b', 'saison', text)
+        text = re.sub(r'\bsaisns?\b', 'saison', text)
+        text = re.sub(r'\bseasons?\b', 'saison', text)
+        text = re.sub(r'\bsaisons\b', 'saison', text)
+        text = re.sub(r'\bsaion(\d+)\b', r'saison \1', text)
+        text = re.sub(r'\bsaisn(\d+)\b', r'saison \1', text)
+        text = re.sub(r'\bseason(\d+)\b', r'saison \1', text)
+        text = re.sub(r'\bsaison(\d+)\b', r'saison \1', text)
+        text = re.sub(r'\bs0*(\d+)\b', r'saison \1', text)
+        text = re.sub(r'\bmovies?\b', 'film', text)
+        text = re.sub(r'\bov[as]+\b', 'oav', text)
+        text = re.sub(r'\boavs\b', 'oav', text)
+        # Si c'est juste un chiffre : "1" -> "saison 1"
+        if re.match(r'^\d+$', text):
+            text = f"saison {int(text)}"
+        return re.sub(r'\s+', ' ', text).strip()
+
+    @staticmethod
+    def match_season(reponse, saison_query):
+        if not reponse or not isinstance(reponse, list):
+            return None
+
+        if not saison_query:
+            saison_query = "saison 1"
+
+        q_norm = Cardinal.normalize_season_text(saison_query)
+        q_compact = re.sub(r'[^a-z0-9]', '', q_norm)
+
+        # Extraire le numéro de saison visé dans la requête
+        q_num_match = re.search(r'\b(?:saison|saga|partie|part)?\s*(\d+)\b', q_norm)
+        q_num = int(q_num_match.group(1)) if q_num_match else None
+
+        candidates = []
+        for idx, item in enumerate(reponse):
+            s_raw = item.get("Saison", "")
+            s_norm = Cardinal.normalize_season_text(s_raw)
+            s_compact = re.sub(r'[^a-z0-9]', '', s_norm)
+
+            s_num_match = re.search(r'\b(?:saison|saga|partie|part)\s*(\d+)\b', s_norm)
+            if not s_num_match:
+                s_num_match = re.search(r'\b(\d+)\b', s_norm)
+            s_num = int(s_num_match.group(1)) if s_num_match else None
+
+            candidates.append({
+                "idx": idx,
+                "item": item,
+                "raw": s_raw,
+                "norm": s_norm,
+                "compact": s_compact,
+                "num": s_num
+            })
+
+        # 1. Correspondance exacte sur la chaîne compacte
+        for c in candidates:
+            if c["compact"] == q_compact:
+                return c["item"]
+
+        # 2. Correspondance sur le numéro précis (ex: 'saison 1', 'saion1', 's1', '1' match 'Saison 1' ou 'Saga 1')
+        if q_num is not None:
+            for c in candidates:
+                if c["num"] == q_num:
+                    return c["item"]
+
+        # 3. Mots-clés spéciaux (film, oav, scan, kai)
+        for kw in ['film', 'oav', 'scan', 'kai']:
+            if kw in q_norm:
+                matching = [c for c in candidates if kw in c["norm"]]
+                if matching:
+                    if q_num is not None:
+                        num_match = [c for c in matching if c["num"] == q_num]
+                        if num_match:
+                            return num_match[0]["item"]
+                    return matching[0]["item"]
+
+        # 4. Correspondance de sous-chaîne sans collision de numéro
+        for c in candidates:
+            if (q_compact in c["compact"] or c["compact"] in q_compact) and (q_num is None or c["num"] == q_num):
+                return c["item"]
+
+        # 5. Fuzzy matching via RapidFuzz
+        best_candidate = None
+        best_score = 0.0
+        for c in candidates:
+            if q_num is not None and c["num"] is not None and c["num"] != q_num:
+                continue
+            score = fuzz.token_sort_ratio(q_norm, c["norm"])
+            if score > best_score and score >= 70.0:
+                best_score = score
+                best_candidate = c["item"]
+        if best_candidate:
+            return best_candidate
+
+        # 6. Fallback pour la requête par défaut ('saison 1' / 'saison' / 'saion1' si l'anime n'a pas de saison 1 numérotée)
+        if q_norm in ["saison 1", "saison"] or q_compact in ["saison1", "saison"]:
+            non_scans = [c["item"] for c in candidates if "scan" not in c["norm"]]
+            if non_scans:
+                return non_scans[0]
+            return reponse[0]
+
+        return None
+
     def getSpecificAnime(nom, saison=None, version=None): # Syntaxe exemple nom, saison, version : spice%20and%20wolf&s=saison1&v=vostfr
         reponse = Cardinal.getInfoAnime(nom)
         if not reponse or not isinstance(reponse, list):
             return None
 
-        # Vérifier que saison n'est pas vide
-        if not saison:
-            saison = "saison1"
-        if not version:
-            version = "vostfr"
+        matched = Cardinal.match_season(reponse, saison)
+        if not matched:
+            return None
 
-        # Extraire toutes les saisons
-        saisons = [item["Saison"] for item in reponse if "Saison" in item]
-        
-        # Normaliser les noms
-        saisons_normalized = [s.strip().lower().replace(" ", "") for s in saisons]
-        saison_norm = saison.strip().lower().replace(" ", "")
-        
-        for i, s in enumerate(saisons_normalized):
-            if s == saison_norm or (saison_norm in ["oav", "oavs"] and "oav" in s):
-                return reponse[i]
+        if version:
+            matched_copy = dict(matched)
+            v_norm = "vf" if version.strip().lower() in ["vf", "dub", "french", "fr"] else "vostfr"
+            base_saison_url = re.sub(r'/(?:vostfr|vf)/?$', '', matched_copy.get("url", ""), flags=re.IGNORECASE)
+            base_saison_url = re.sub(r'(?<!:)//+', '/', base_saison_url)
+            matched_copy["url"] = f"{base_saison_url}/{v_norm}"
+            return matched_copy
 
-        for i, s in enumerate(saisons_normalized):
-            if saison_norm in s or s in saison_norm:
-                return reponse[i]
-
-        # Seul le défaut 'saison1' ou 'saison' autorise le repli sur le premier contenu disponible
-        if saison_norm in ["saison1", "saison"] and reponse:
-            return reponse[0]
-
-        return None
+        return matched
         
     def getAnimeLink(nom, saison=None, version=None): # Recupère les différents liens disponibles afin de retourner une playlist complète et prête à être téléchargée
         
@@ -554,25 +672,22 @@ class Cardinal:
         base_url = reponse.get("base_url", "")
         url = reponse["url"]
 
-        saison_num = saison.lower().replace(" ", "")
-        version = version.lower().replace(" ", "")
-
-        if saison_num == "film":
-            first_rewoks = url.lower().replace("//film", "/film")
-            second_rewoks = re.sub(r'/(?:vostfr|vf)/?$', '', first_rewoks, flags=re.IGNORECASE)
-            link = f"{second_rewoks}/{version}"
-        elif saison_num in ["oav", "oavs"]:
-            first_rewoks = url.lower().replace("//oav", "/oav")
-            second_rewoks = re.sub(r'/(?:vostfr|vf)/?$', '', first_rewoks, flags=re.IGNORECASE)
-            link = f"{second_rewoks}/{version}"
-        else:
-            new_url = re.sub(r'/(?:vostfr|vf)/?$', '', url, flags=re.IGNORECASE)
-            link = f"{new_url}/{version}"
+        v_norm = "vf" if version.strip().lower() in ["vf", "dub", "french", "fr"] else "vostfr"
+        new_url = re.sub(r'/(?:vostfr|vf)/?$', '', url, flags=re.IGNORECASE)
+        new_url = re.sub(r'(?<!:)//+', '/', new_url)
+        link = f"{new_url}/{v_norm}"
 
         scraper = cloudscraper.create_scraper()
         second = scraper.get(link)
         if second.status_code != 200:
-            return []
+            if url != link:
+                second = scraper.get(url)
+                if second.status_code == 200:
+                    link = url
+                else:
+                    return []
+            else:
+                return []
 
         soup = BeautifulSoup(second.text, 'html.parser')
         
@@ -583,13 +698,20 @@ class Cardinal:
         src = script_tag.get("src", "")
         js_link = src.split('"')[0].split("'")[0]
 
-        jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
+        if js_link.startswith("http://") or js_link.startswith("https://"):
+            jsfile = js_link
+        elif js_link.startswith("/"):
+            parsed_link = urlparse(link)
+            jsfile = f"{parsed_link.scheme}://{parsed_link.netloc}{js_link}"
+        else:
+            jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
+
         js_text = scraper.get(jsfile, headers={**headers, "Referer": link}).text
         # Supporte eps1, eps2... ainsi que epsAS ou autres variantes de lecteurs
         matches = re.findall(r"var\s+(eps\w+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
 
         all_eps = {
-            name: re.findall(r"'(https?://[^']+)'", content)
+            name: re.findall(r'''['"](https?://[^'"]+)['"]''', content)
             for name, content in matches
         }
 
