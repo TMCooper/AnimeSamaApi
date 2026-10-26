@@ -1,5 +1,5 @@
 import json, os, re, cloudscraper, requests, unicodedata
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 from concurrent.futures import ThreadPoolExecutor
 from rapidfuzz import process, fuzz
 from bs4 import BeautifulSoup
@@ -40,12 +40,16 @@ class Cardinal:
         os.makedirs(PATH_DIR, exist_ok=True) # Verifi l'existance du dossier data/json
 
         is_empty = True
+        existing_alts_by_link = {}
         if os.path.exists(PATH_ANIME) and os.path.getsize(PATH_ANIME) > 2:
             try:
                 with open(PATH_ANIME, "r", encoding="utf-8") as f:
                     existing = json.load(f)
                     if isinstance(existing, list) and len(existing) > 0:
                         is_empty = False
+                        for item in existing:
+                            if isinstance(item, dict) and item.get("link") and item.get("alt_titles"):
+                                existing_alts_by_link[item["link"]] = item["alt_titles"]
             except Exception:
                 is_empty = True
 
@@ -136,11 +140,14 @@ class Cardinal:
 
                     if titre and link and link not in seen_links:
                         seen_links.add(link)
-                        data.append({
+                        entry = {
                             "title": Cardinal.normalize_title(titre),
                             "link": link,
                             "cover": cover
-                        })
+                        }
+                        if link in existing_alts_by_link:
+                            entry["alt_titles"] = existing_alts_by_link[link]
+                        data.append(entry)
             else:
                 titles = soup.find_all('h2', class_="card-title")
                 for title_tag in titles:
@@ -154,11 +161,14 @@ class Cardinal:
 
                     if titre and link and link not in seen_links:
                         seen_links.add(link)
-                        data.append({
+                        entry = {
                             "title": Cardinal.normalize_title(titre),
                             "link": link,
                             "cover": img_src
-                        })
+                        }
+                        if link in existing_alts_by_link:
+                            entry["alt_titles"] = existing_alts_by_link[link]
+                        data.append(entry)
 
         with open(PATH_ANIME, "w", encoding='utf-8') as t:
             json.dump(data, t, ensure_ascii=False, indent=2)
@@ -246,70 +256,193 @@ class Cardinal:
         text = re.sub(r'\s+', ' ', text).strip()
         return text
             
-    def serchAnime(search, limit):  # Recherche les animes par fuzzy matching
+    STOP_WORDS = {'le', 'la', 'les', 'un', 'une', 'de', 'du', 'des', 'the', 'a', 'an', 'of', 'in', 'to', 'no', 'et', 'and'}
+
+    @staticmethod
+    def _evaluate_match(cq, ct):
+        if cq == ct:
+            return 100.0
+
+        q_words = cq.split()
+        t_words = ct.split()
+        if not q_words or not t_words:
+            return 0.0
+
+        # Cas 1: cq est une sous-chaîne exacte de ct (ex: 'naruto' in 'naruto shippuden')
+        if cq in ct:
+            ratio_len = len(cq) / len(ct)
+            return 85.0 + 15.0 * ratio_len
+
+        # Cas 2: ct est une sous-chaîne exacte de cq (ex: 'frieren' in 'sousou no frieren')
+        if ct in cq and len(ct) >= 3:
+            non_matching_q = [w for w in q_words if not any(fuzz.ratio(w, tw) >= 70 for tw in t_words)]
+            non_matching_substantive = [w for w in non_matching_q if w not in Cardinal.STOP_WORDS]
+            # Si plus de 2 mots substantiels ajoutés ne correspondent à rien, rejeter
+            if len(non_matching_substantive) >= 3:
+                return 0.0
+            ratio_len = len(ct) / len(cq)
+            return 80.0 + 20.0 * ratio_len
+
+        # Cas 3: Ni l'un ni l'autre n'est sous-chaîne
+        # Chaque mot important de la requête doit correspondre à au moins un mot du titre
+        for qw in q_words:
+            if qw in Cardinal.STOP_WORDS:
+                continue
+            best_w = max((fuzz.ratio(qw, tw) for tw in t_words), default=0)
+            if best_w < 70:
+                return 0.0
+
+        # Vérifier aussi la couverture inverse pour rejeter les titres trop longs et hors-sujet
+        matched_t = 0
+        substantive_t = 0
+        for tw in t_words:
+            if tw in Cardinal.STOP_WORDS:
+                continue
+            substantive_t += 1
+            best_w = max((fuzz.ratio(tw, qw) for qw in q_words), default=0)
+            if best_w >= 70:
+                matched_t += 1
+
+        if substantive_t > 0 and (matched_t / substantive_t) < 0.4:
+            return 0.0
+
+        ts_ratio = fuzz.token_sort_ratio(cq, ct)
+        w_ratio = fuzz.WRatio(cq, ct)
+        tset_ratio = fuzz.token_set_ratio(cq, ct)
+        return (ts_ratio * 0.4) + (w_ratio * 0.4) + (tset_ratio * 0.2)
+            
+    @staticmethod
+    def update_anime_alt_titles(canonical_link_or_title, alt_titles):
+        """Met à jour les titres alternatifs d'un anime dans AnimeInfo.json."""
+        if not alt_titles or not canonical_link_or_title:
+            return
+        try:
+            if not os.path.exists(PATH_ANIME):
+                return
+            with open(PATH_ANIME, "r", encoding="utf-8") as f:
+                animes_data = json.load(f)
+            if not isinstance(animes_data, list):
+                return
+
+            updated = False
+            for anime in animes_data:
+                if anime.get("link") == canonical_link_or_title or anime.get("title") == canonical_link_or_title:
+                    existing_alts = set(anime.get("alt_titles", []))
+                    new_alts = set(alt_titles)
+                    if not new_alts.issubset(existing_alts):
+                        anime["alt_titles"] = sorted(list(existing_alts.union(new_alts)))
+                        updated = True
+                    break
+
+            if updated:
+                with open(PATH_ANIME, "w", encoding="utf-8") as f:
+                    json.dump(animes_data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def serchAnime(search, limit=5):  # Recherche les animes par matching intelligent et précis (titres principaux + alternatifs)
         animes_data = Cardinal.loadBaseAnimeData()
         if not isinstance(animes_data, list):
             return []
 
-        cleaned_search = Cardinal.clean_string(search)  # Utilise directement Cardinal.clean_string
+        cleaned_search = Cardinal.clean_string(search)
         if not cleaned_search:
             return []
 
-        # Utilisation de dictionnaires pour garantir l'unicité
-        cleaned_to_original_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("title") for anime in animes_data if anime.get("title")}
-        cleaned_to_id_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("link") for anime in animes_data if anime.get("title")}
+        scored_results = []
+        seen = set()
 
-        cleaned_to_cover_map = {Cardinal.clean_string(anime.get("title", "")): anime.get("cover") for anime in animes_data if anime.get("title")}
-        
-        cleaned_titles = list(cleaned_to_original_map.keys())
+        cleaned_to_anime = {}
+        cleaned_keys = []
 
-        # On prend une marge plus large pour avoir assez de matière pour notre tri intelligent
-        matches = process.extract(cleaned_search, cleaned_titles, scorer=fuzz.token_set_ratio, limit=15) 
+        for anime in animes_data:
+            t = anime.get("title")
+            if not t:
+                continue
+            cleaned_main = Cardinal.clean_string(t)
+            if cleaned_main:
+                cleaned_to_anime[cleaned_main] = (anime, 1.0)
+                cleaned_keys.append(cleaned_main)
 
-        temp_results = []
-        
-        for cleaned_title, score, _ in matches:
-            if score < 75:
+            # Prise en compte des titres alternatifs déjà connus localement
+            for alt in anime.get("alt_titles", []):
+                cleaned_alt = Cardinal.clean_string(alt)
+                if cleaned_alt and cleaned_alt not in cleaned_to_anime:
+                    cleaned_to_anime[cleaned_alt] = (anime, 0.98)
+                    cleaned_keys.append(cleaned_alt)
+
+        # 1. Extraction préliminaire locale
+        candidates = process.extract(cleaned_search, cleaned_keys, scorer=fuzz.WRatio, limit=50)
+
+        for candidate_key, _, _ in candidates:
+            anime_entry, weight = cleaned_to_anime.get(candidate_key, (None, 1.0))
+            if not anime_entry:
                 continue
 
-            # Logique de score intelligent
-            length_ratio = len(cleaned_title) / len(cleaned_search) if len(cleaned_search) > 0 else 0
-            specificity_bonus = 0
-            if 0.9 <= length_ratio <= 1.1:
-                specificity_bonus = 10
-            elif length_ratio < 0.5:
-                specificity_bonus = -15
-                
-            final_score = score + specificity_bonus
+            link = anime_entry.get("link")
+            if link in seen:
+                continue
 
-            original_title = cleaned_to_original_map.get(cleaned_title)
-            anime_link = cleaned_to_id_map.get(cleaned_title)
+            raw_score = Cardinal._evaluate_match(cleaned_search, candidate_key)
+            if raw_score < 75.0:
+                continue
 
-            anime_cover = cleaned_to_cover_map.get(cleaned_title)
+            final_score = raw_score * weight
+            seen.add(link)
+            scored_results.append({
+                "title": anime_entry.get("title"),
+                "alt_titles": anime_entry.get("alt_titles", []),
+                "lien": link,
+                "cover": anime_entry.get("cover"),
+                "score": round(final_score, 1)
+            })
 
-            if original_title and anime_link:
-                temp_results.append({
-                    "title": original_title,
-                    "lien": anime_link,
-                    "cover": anime_cover,
-                    "final_score": final_score
-                })
+        # 2. Si aucun résultat local de haute confiance (>= 88), interroger la recherche native Anime-Sama
+        # Anime-Sama effectue une recherche SQL sur l'intégralité de ses titres principaux et alternatifs
+        best_score = scored_results[0]["score"] if scored_results else 0.0
+        if best_score < 88.0:
+            try:
+                scraper = cloudscraper.create_scraper()
+                base_url = BASE_URL if BASE_URL else Utils.findLink()
+                r = scraper.get(f"{base_url}/catalogue/fragment.php?page=1&search={quote(cleaned_search)}", timeout=5)
+                if r.status_code == 200:
+                    json_resp = r.json()
+                    soup = BeautifulSoup(json_resp.get('liste', ''), 'html.parser')
+                    cards = soup.select('.as-carte')
+                    for card in cards:
+                        nom = card.get('data-nom', '').strip()
+                        link = card.get('data-url', '').strip()
+                        cover = card.get('data-img', '').strip()
+                        if link:
+                            parsed = urlparse(link)
+                            path = parsed.path.rstrip('/')
+                            link = f"{base_url.rstrip('/')}{path}"
 
-        # Tri sur le score final
-        temp_results.sort(key=lambda x: x["final_score"], reverse=True)
+                        if nom and link and link not in seen:
+                            seen.add(link)
+                            norm_title = Cardinal.normalize_title(nom)
+                            local_match = next((a for a in animes_data if a.get("link") == link or a.get("title") == norm_title), None)
+                            if local_match:
+                                scored_results.append({
+                                    "title": local_match.get("title", norm_title),
+                                    "alt_titles": local_match.get("alt_titles", []),
+                                    "lien": local_match.get("link", link),
+                                    "cover": local_match.get("cover", cover),
+                                    "score": 93.0
+                                })
+                            else:
+                                scored_results.append({
+                                    "title": norm_title,
+                                    "alt_titles": [],
+                                    "lien": link,
+                                    "cover": cover,
+                                    "score": 93.0
+                                })
+            except Exception:
+                pass
 
-        # Logique anti-doublons et application de la limite
-        final_results = []
-        seen_ids = set()
-        for res in temp_results:
-            if len(final_results) >= limit:
-                break
-            if res["lien"] not in seen_ids:
-                res['score'] = res.pop('final_score')
-                final_results.append(res)
-                seen_ids.add(res["lien"])
-
-        return final_results
+        scored_results.sort(key=lambda x: x["score"], reverse=True)
+        return scored_results[:limit]
     
     def getInfoAnime(querry):
         animes = []
@@ -323,6 +456,8 @@ class Cardinal:
 
         scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
         reponse = scraper.get(base_url)
+        if reponse.status_code != 200:
+            return []
         soup = BeautifulSoup(reponse.text, 'html.parser')
 
         # Récupération du synopsis
@@ -338,6 +473,19 @@ class Cardinal:
                 extra.decompose()
             synopsis = re.sub(r'\s+', ' ', synopsis_tag.get_text(separator=' ', strip=True)).strip()
 
+        # Récupération des titres alternatifs officiels
+        alt_titles = []
+        alt_tag = soup.find(id="titreAlter") or soup.find(class_="oe-alters")
+        if alt_tag:
+            raw_alts = alt_tag.get_text(separator=',', strip=True)
+            alt_titles = [Cardinal.normalize_title(a.strip()) for a in raw_alts.split(',') if a.strip()]
+            seen_alts = set()
+            alt_titles = [a for a in alt_titles if a and not (a in seen_alts or seen_alts.add(a))]
+
+        # Mise à jour du cache AnimeInfo.json avec ces titres alternatifs
+        if alt_titles:
+            Cardinal.update_anime_alt_titles(base_url, alt_titles)
+
         scripts = soup.find_all("script")
         pattern = re.compile(r'panneau(?:Anime|Film|Scan|Visual)\s*\(\s*(["\'])(.*?)\1\s*,\s*(["\'])(.*?)\3\s*\)')
 
@@ -351,6 +499,7 @@ class Cardinal:
                         animes.append({
                             "base_url": base_url,
                             "title": title,
+                            "alt_titles": alt_titles,
                             "cover": cover,
                             "synopsis": synopsis,
                             "Saison": nom,
@@ -385,7 +534,8 @@ class Cardinal:
             if saison_norm in s or s in saison_norm:
                 return reponse[i]
 
-        if reponse and len(reponse) > 0:
+        # Seul le défaut 'saison1' ou 'saison' autorise le repli sur le premier contenu disponible
+        if saison_norm in ["saison1", "saison"] and reponse:
             return reponse[0]
 
         return None
@@ -421,6 +571,8 @@ class Cardinal:
 
         scraper = cloudscraper.create_scraper()
         second = scraper.get(link)
+        if second.status_code != 200:
+            return []
 
         soup = BeautifulSoup(second.text, 'html.parser')
         
@@ -540,39 +692,53 @@ class Cardinal:
         if not chap:
             chap = "all"
 
-        resolve_json = {}
-
-        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        chap_information = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getScanHashmap?n={nom}").json()
+        chap_information = Cardinal.getScanHashmap(nom)
+        if not chap_information or not isinstance(chap_information, dict) or "title" not in chap_information:
+            return {}
 
         origin_title = chap_information["title"]
-        title = origin_title.replace(" ", "%20")
+        title = quote(origin_title)
+        max_chap = chap_information.get("max_chapter", 0)
+        if max_chap <= 0:
+            return {}
         
+        resolve_json = {}
         if chap == "all":
-            for chapitre in range(1, chap_information.get("max_chapter", 0) + 1): # La variable chapitre contient seulement l'id du chapitre que l'on analyse
+            for chapitre in range(1, max_chap + 1):
                 chap_key = f"Chapitre {chapitre}"
                 resolve_json[chap_key] = []
-                # Renvoie le nombre de page qu'il va faloir loop pour recuperer toute les images : chap_information[f"Chapitre {chapitre}"]
-                for images in range (1, chap_information[str(chapitre)] + 1):
-                    
-                    resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chapitre}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
+                nb_images = chap_information.get(str(chapitre), 0)
+                for images in range(1, nb_images + 1):
+                    resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chapitre}/{images}.jpg")
         else:
+            str_chap = str(chap)
+            if str_chap not in chap_information:
+                return {}
             chap_key = f"Chapitre {chap}"
             resolve_json[chap_key] = []
-            for images in range(1, chap_information[str(chap)] + 1):
-                resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chap}/{images}.jpg") # Lien typique sous se format https://anime-sama.to/s2/scans/nomeScan/chapitreNumber/imageNumber.jpg : https://anime-sama.to/s2/scans/Frieren/1/2.jpg
+            nb_images = chap_information.get(str_chap, 0)
+            for images in range(1, nb_images + 1):
+                resolve_json[chap_key].append(f"https://anime-sama.to/s2/scans/{title}/{chap}/{images}.jpg")
 
         return resolve_json
 
     def getScanHashmap(nom):
         saison = "scans"
 
-        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
-        reponse = scraper.get(f"http://{Config.IP}:{Config.PORT}/api/getSpecificAnime?q={nom}&s={saison}").json()
+        reponse = Cardinal.getSpecificAnime(nom, saison=saison)
+        if not reponse or not isinstance(reponse, dict) or "title" not in reponse:
+            return {}
 
-        # Lien typique que l'on vise pour les informations de base : https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre=Frieren
         title = reponse["title"]
-        chap_hashmap = scraper.get(f"https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre={title}")
-        chap_information = Utils.transform_chapters(chap_hashmap.content, title)
-
-        return chap_information
+        try:
+            scraper = cloudscraper.create_scraper()
+            encoded_title = quote(title)
+            chap_hashmap = scraper.get(f"https://anime-sama.to/s2/scans/get_nb_chap_et_img.php?oeuvre={encoded_title}", timeout=10)
+            if chap_hashmap.status_code != 200:
+                return {}
+            chap_information = Utils.transform_chapters(chap_hashmap.content, title)
+            if not chap_information or not isinstance(chap_information, dict) or chap_information.get("max_chapter", 0) == 0:
+                return {}
+            return chap_information
+        except Exception:
+            return {}

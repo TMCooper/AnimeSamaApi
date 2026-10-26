@@ -80,7 +80,10 @@ class Yui:
         if not querry:
             return jsonify({"error": "Paramètre 'q' manquant"}), 400
 
-        return jsonify(Cardinal.getSpecificAnime(querry, saison, version))    
+        res = Cardinal.getSpecificAnime(querry, saison, version)
+        if res is None:
+            return jsonify({})
+        return jsonify(res)    
     
     @app.route('/api/getAnimeLink', methods=["GET"])
     def getAnimeLink():

@@ -88,18 +88,39 @@ class Utils:
 
 
     def transform_chapters(data, title: str) -> dict:
-        chapters = json.loads(data.decode("utf-8"))
+        try:
+            if isinstance(data, (bytes, bytearray)):
+                data_str = data.decode("utf-8", errors="ignore")
+            elif isinstance(data, str):
+                data_str = data
+            else:
+                return {}
 
-        # Structure de base
-        result = {
-            "title": title,
-            "max_chapter": len(chapters)
-        }
+            chapters = json.loads(data_str)
+            if not isinstance(chapters, dict) or "error" in chapters:
+                return {}
 
-        sorted_chapters = sorted(chapters.items(), key=lambda item: int(item[0]))
+            numeric_chapters = []
+            for k, v in chapters.items():
+                try:
+                    num = float(k) if '.' in str(k) else int(k)
+                    numeric_chapters.append((k, num, int(v)))
+                except (ValueError, TypeError):
+                    continue
 
-        # Ajout des chapitres au format "chapitre n"
-        for chapter_num, nb_images in sorted_chapters:
-            result[f"{chapter_num}"] = nb_images
+            if not numeric_chapters:
+                return {}
 
-        return result
+            numeric_chapters.sort(key=lambda item: item[1])
+
+            result = {
+                "title": title,
+                "max_chapter": len(numeric_chapters)
+            }
+
+            for original_k, _, nb_images in numeric_chapters:
+                result[str(original_k)] = nb_images
+
+            return result
+        except Exception:
+            return {}
