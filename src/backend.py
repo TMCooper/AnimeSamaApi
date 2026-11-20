@@ -690,33 +690,89 @@ class Cardinal:
                 return []
 
         soup = BeautifulSoup(second.text, 'html.parser')
-        
-        script_tag = soup.find("script", src=lambda s: s and "episodes.js" in s)
-        if not script_tag:
-            return []
 
-        src = script_tag.get("src", "")
-        js_link = src.split('"')[0].split("'")[0]
+        eps_source = ""
+        eps_jeton = ""
+        eps_meta = {}
 
-        if js_link.startswith("http://") or js_link.startswith("https://"):
-            jsfile = js_link
-        elif js_link.startswith("/"):
-            parsed_link = urlparse(link)
-            jsfile = f"{parsed_link.scheme}://{parsed_link.netloc}{js_link}"
+        # Nouveau format Anime-Sama variables eps1/eps2... + epsMeta & epsJeton 
+        for sc in soup.find_all("script"):
+            if not sc.get("src") and sc.string and re.search(r"var\s+eps\w+\s*=\s*\[", sc.string):
+                eps_source = sc.string
+                break
+
+        if eps_source:
+            jeton_match = re.search(r'var\s+epsJeton\s*=\s*["\']([^"\']+)["\']', eps_source)
+            if jeton_match:
+                eps_jeton = jeton_match.group(1)
+            meta_match = re.search(r'var\s+epsMeta\s*=\s*(\{.*?\});', eps_source, re.DOTALL)
+            if meta_match:
+                try:
+                    eps_meta = json.loads(meta_match.group(1))
+                except Exception:
+                    eps_meta = {}
         else:
-            jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
+            # Ancien format : fichier externe episodes.js
+            script_tag = soup.find("script", src=lambda s: s and "episodes.js" in s)
+            if not script_tag:
+                return []
 
-        js_text = scraper.get(jsfile, headers={**headers, "Referer": link}).text
+            src = script_tag.get("src", "")
+            js_link = src.split('"')[0].split("'")[0]
+
+            if js_link.startswith("http://") or js_link.startswith("https://"):
+                jsfile = js_link
+            elif js_link.startswith("/"):
+                parsed_link = urlparse(link)
+                jsfile = f"{parsed_link.scheme}://{parsed_link.netloc}{js_link}"
+            else:
+                jsfile = f"{link.rstrip('/')}/{js_link.lstrip('/')}"
+
+            eps_source = scraper.get(jsfile, headers={**headers, "Referer": link}).text
+
         # Supporte eps1, eps2... ainsi que epsAS ou autres variantes de lecteurs
-        matches = re.findall(r"var\s+(eps\w+)\s*=\s*\[(.*?)\];", js_text, re.DOTALL)
+        matches = re.findall(r"var\s+(eps\w+)\s*=\s*\[(.*?)\];", eps_source, re.DOTALL)
 
         all_eps = {
-            name: re.findall(r'''['"](https?://[^'"]+)['"]''', content)
+            name: re.findall(r'''['"]((?:https?://|lien:)[^'"]+)['"]''', content)
             for name, content in matches
         }
 
         if not all_eps:
             return []
+
+        parsed_link = urlparse(link)
+        api_lien_base = f"{parsed_link.scheme}://{parsed_link.netloc}/api/lien.php"
+
+        def fetch_lien_url(entry):
+            if not entry.startswith("lien:"):
+                return entry
+            if not eps_jeton:
+                return ""
+            lien_id = entry.split(":", 1)[1]
+            for _ in range(2):
+                try:
+                    r = scraper.get(
+                        f"{api_lien_base}?j={quote(eps_jeton)}&l={quote(lien_id)}",
+                        headers={**headers, "Referer": link},
+                        timeout=8
+                    )
+                    if r.status_code == 200:
+                        data = r.json()
+                        if isinstance(data, dict) and data.get("u"):
+                            return data["u"].strip()
+                except Exception:
+                    pass
+            return ""
+
+        def get_entry_hint(entry):
+            entry_low = entry.lower()
+            if entry_low.startswith("lien:"):
+                lien_id = entry_low.split(":", 1)[1]
+                meta_info = eps_meta.get(lien_id)
+                if isinstance(meta_info, list) and meta_info and isinstance(meta_info[0], str):
+                    return meta_info[0].lower()
+            return entry_low
 
         def get_lecteur_idx(k):
             num = re.sub(r'[^0-9]', '', k)
@@ -724,7 +780,7 @@ class Cardinal:
 
         def lecteur_priority(l_name):
             urls = all_eps.get(l_name, [])
-            first_url = urls[0].lower() if urls else ""
+            first_url = get_entry_hint(urls[0]) if urls else ""
             if "ansembed" in first_url:
                 return 0
             if any(s in first_url for s in ["smoothpre", "vidhide", "streamwish", "vidmoly"]):
@@ -752,7 +808,11 @@ class Cardinal:
                 if ep_idx >= len(eps_list):
                     continue
 
-                url_to_test = eps_list[ep_idx].strip(" \t\n\r\xa0")
+                raw_entry = eps_list[ep_idx].strip(" \t\n\r\xa0")
+                if not raw_entry:
+                    continue
+
+                url_to_test = fetch_lien_url(raw_entry)
                 if not url_to_test or "sibnet.ru" in url_to_test.lower():
                     if url_to_test and not fallback_url:
                         fallback_url = url_to_test
