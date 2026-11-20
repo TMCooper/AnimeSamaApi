@@ -38,7 +38,7 @@ Pygments==2.20.0
 pyparsing==3.2.5
 pyquery==2.0.1
 RapidFuzz==3.14.1
-requests==2.32.0
+requests>=2.32.0
 requests-file==3.0.1
 requests-toolbelt==1.0.0
 rich==15.0.0
